@@ -17,6 +17,8 @@
 
 ### Fixes
 
+- Fix a Claude session reopened without a new message jumping to the top of
+  the list and into the `--since` window; it is now dated by its last message.
 - Fix `→`, `←` and `Enter` not expanding or collapsing truncated messages in
   `tools·trn`.
 - Fix `→`, `←` and `Enter` on a call in `tools·sum` expanding or collapsing

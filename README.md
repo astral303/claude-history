@@ -203,9 +203,9 @@ Long units such as `30minutes`, `2days`, and `6months` also work. Units ignore
 case. `m` means minutes; `mo` means months. Date bounds include the full unit
 written, so `--before 2026-07-20` includes all of July 20.
 
-Filtering happens before ranking. Claude uses the transcript's modification
-time. The other agents use the latest user or assistant activity, then the
-session header time, then the modification time.
+Filtering happens before ranking. A session's time is its latest user or
+assistant activity, then the session header time, then the transcript's
+modification time.
 
 When the conversation list is filtered, `^L filters` appears next to the result
 count. Press `Ctrl+L` to see the active filters. `^L filters` and the `Ctrl+L`
