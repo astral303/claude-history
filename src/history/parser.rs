@@ -185,8 +185,6 @@ fn conversation_from_projection(
     modified: Option<SystemTime>,
     debug_level: Option<DebugLevel>,
 ) -> Option<Conversation> {
-    // Prefer the last message's own timestamp; the header's start time and the
-    // file mtime are progressively weaker stand-ins.
     let timestamp = latest_activity_timestamp(&projection.entries)
         .or_else(|| {
             DateTime::parse_from_rfc3339(&projection.header.timestamp)
@@ -319,7 +317,6 @@ impl ConversationBuilder {
                         + usage.cache_creation_input_tokens
                         + usage.cache_read_input_tokens;
                 }
-                // Track timestamps for conversation duration
                 if let Some(ref ts_str) = timestamp
                     && let Ok(ts) = chrono::DateTime::parse_from_rfc3339(ts_str)
                 {
@@ -393,7 +390,6 @@ impl ConversationBuilder {
                     .as_ref()
                     .and_then(|id| self.assistant_id_ordinals.get(id).copied())
                     .unwrap_or(self.message_count + 1);
-                // Track timestamps for conversation duration
                 if let Some(ref ts_str) = timestamp
                     && let Ok(ts) = chrono::DateTime::parse_from_rfc3339(ts_str)
                 {
@@ -765,9 +761,13 @@ pub fn process_conversation_reader<R: BufRead>(
         line_idx += 1;
     }
 
-    // Use file modification time, falling back to current time if unavailable
-    let timestamp = modified
-        .map(DateTime::<Local>::from)
+    // Claude Code appends untimestamped bookkeeping records when a session is
+    // reopened, so the file's modification time records the last reopening,
+    // not the last message.
+    let timestamp = builder
+        .last_timestamp
+        .map(|last| last.with_timezone(&Local))
+        .or_else(|| modified.map(DateTime::<Local>::from))
         .unwrap_or_else(Local::now);
 
     Ok(builder.finish(path, timestamp, debug_level))
@@ -1042,6 +1042,68 @@ mod tests {
         let content = "\n\n   \n\n";
         let result = parse_jsonl(content).unwrap();
         assert!(result.is_none());
+    }
+
+    // === Session timestamp ===
+
+    fn parse_jsonl_modified_at(content: &str, modified: DateTime<Local>) -> Conversation {
+        process_conversation_reader(
+            PathBuf::from("test.jsonl"),
+            Cursor::new(content),
+            Some(SystemTime::from(modified)),
+            None,
+        )
+        .unwrap()
+        .unwrap()
+    }
+
+    fn local_time(rfc3339: &str) -> DateTime<Local> {
+        DateTime::parse_from_rfc3339(rfc3339)
+            .unwrap()
+            .with_timezone(&Local)
+    }
+
+    #[test]
+    fn a_session_is_dated_by_its_last_message_not_the_files_modification_time() {
+        let content = [
+            user_msg("Hello", None),
+            r#"{"type": "assistant", "timestamp": "2026-09-02T19:55:19Z", "message": {"role": "assistant", "content": [{"type": "text", "text": "Done"}]}}"#.to_owned(),
+            r#"{"type": "last-prompt", "lastPrompt": "Hello"}"#.to_owned(),
+            r#"{"type": "cost-state"}"#.to_owned(),
+        ]
+        .join("\n");
+
+        let conv = parse_jsonl_modified_at(&content, local_time("2026-09-06T22:49:44Z"));
+
+        assert_eq!(conv.timestamp, local_time("2026-09-02T19:55:19Z"));
+    }
+
+    #[test]
+    fn a_system_record_after_the_last_message_does_not_date_the_session() {
+        let content = [
+            user_msg("Hello", None),
+            r#"{"type": "assistant", "timestamp": "2026-09-02T19:55:19Z", "message": {"role": "assistant", "content": [{"type": "text", "text": "Done"}]}}"#.to_owned(),
+            r#"{"type": "system", "subtype": "turn_duration", "timestamp": "2026-09-02T19:58:22Z"}"#.to_owned(),
+        ]
+        .join("\n");
+
+        let conv = parse_jsonl_modified_at(&content, local_time("2026-09-06T22:49:44Z"));
+
+        assert_eq!(conv.timestamp, local_time("2026-09-02T19:55:19Z"));
+    }
+
+    #[test]
+    fn a_session_without_a_timestamped_message_is_dated_by_the_files_modification_time() {
+        let content = [
+            r#"{"type": "user", "message": {"role": "user", "content": "Hello"}}"#,
+            r#"{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Done"}]}}"#,
+        ]
+        .join("\n");
+        let modified = local_time("2026-09-06T22:49:44Z");
+
+        let conv = parse_jsonl_modified_at(&content, modified);
+
+        assert_eq!(conv.timestamp, modified);
     }
 
     // === Message counting ===
