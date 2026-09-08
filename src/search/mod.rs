@@ -2,6 +2,7 @@ pub mod evidence;
 pub mod lexical;
 pub mod literal;
 pub mod mode;
+pub mod preview;
 pub mod query;
 #[cfg(test)]
 pub mod test_fixtures;
