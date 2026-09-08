@@ -641,9 +641,9 @@ impl App {
         if let Some(index) = self.load_session_by_id(query) {
             return SessionLookup::Listed(index);
         }
-        // A miss is reported only for the shape session ids are pasted in.
-        // Anything else is likelier text the user meant to search for.
-        if search::is_uuid(query) {
+        // A miss is reported only for the shape some agent's session ids
+        // have. Anything else is likelier text the user meant to search for.
+        if crate::history::provider::is_session_id_shape(query) {
             SessionLookup::Unresolved
         } else {
             SessionLookup::NotAnId

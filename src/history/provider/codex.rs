@@ -113,11 +113,15 @@ impl SessionProvider for CodexProvider {
         })
     }
 
+    /// Only a UUID is searched for: an ordinary query must not walk the tree.
+    fn is_session_id_shape(&self, query: &str) -> bool {
+        crate::search::is_uuid(query)
+    }
+
     /// A rollout's name carries the thread it records. An undo leaves older
-    /// rollouts of that thread behind, and the newest is the one listed. Only
-    /// a UUID is searched for: an ordinary query must not walk the tree.
+    /// rollouts of that thread behind, and the newest is the one listed.
     fn resolve_session_id(&self, session_id: &str) -> Result<Option<ResolvedSession>> {
-        if !crate::search::is_uuid(session_id) {
+        if !self.is_session_id_shape(session_id) {
             return Ok(None);
         }
         for root in CodexStorage.roots()? {

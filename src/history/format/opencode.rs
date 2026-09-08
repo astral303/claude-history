@@ -50,7 +50,9 @@ impl SessionFormat for OpenCodeDbFormat {
 
 /// Every OpenCode session id starts with this. The locator codec here and
 /// the launcher's stem check both rely on it to tell session stems apart
-/// from other files' names.
+/// from other files' names. A stem the database itself listed needs no more
+/// than the prefix; a typed query is held to the full shape by the provider's
+/// `is_session_id_shape`, so the two checks stay separate.
 pub(crate) const SESSION_ID_PREFIX: &str = "ses_";
 
 /// A decoded locator: which database, which session inside it.

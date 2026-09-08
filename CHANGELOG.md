@@ -17,6 +17,8 @@
 
 ### Fixes
 
+- Fix an unknown OpenCode or Kimi session ID running as a text search; the
+  list now shows "not found", as it does for a UUID.
 - Fix a Claude session reopened without a new message jumping to the top of
   the list and into the `--since` window; it is now dated by its last message.
 - Fix `→`, `←` and `Enter` not expanding or collapsing truncated messages in

@@ -70,7 +70,12 @@ impl SessionProvider for OmpProvider {
     }
 
     /// An OMP session states its id in its header, not its file name, as a Pi
-    /// session does. OMP sessions resolve by id only once listed.
+    /// session does. OMP sessions resolve by id only once listed, so no query
+    /// is answered as an id.
+    fn is_session_id_shape(&self, _query: &str) -> bool {
+        false
+    }
+
     fn resolve_session_id(&self, _session_id: &str) -> Result<Option<ResolvedSession>> {
         Ok(None)
     }

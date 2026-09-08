@@ -76,12 +76,17 @@ impl SessionProvider for ClaudeProvider {
         crate::history::delete_session_by_uuid(session_id)
     }
 
+    /// Only a UUID is joined to a project directory, since any other query
+    /// could be a path.
+    fn is_session_id_shape(&self, query: &str) -> bool {
+        crate::search::is_uuid(query)
+    }
+
     /// Claude names each transcript by its session id, so the file name is the
-    /// lookup. Only a UUID is joined to a project directory, since any other
-    /// query could be a path. The project directory stands as the root; Claude
-    /// keeps no session cache under it, so the stub is parsed on its own.
+    /// lookup. The project directory stands as the root; Claude keeps no
+    /// session cache under it, so the stub is parsed on its own.
     fn resolve_session_id(&self, session_id: &str) -> Result<Option<ResolvedSession>> {
-        if !crate::search::is_uuid(session_id) {
+        if !self.is_session_id_shape(session_id) {
             return Ok(None);
         }
         let Some(transcript) = crate::history::find_jsonl_by_uuid(session_id)? else {

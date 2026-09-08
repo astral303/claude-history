@@ -1322,6 +1322,37 @@ fn a_session_id_no_agent_stores_empties_the_list_and_names_the_id() {
     assert_eq!(app.unresolved_session_id(), Some(ABSENT));
 }
 
+/// An OpenCode or Kimi id is shaped unlike a UUID, and a miss on one is an
+/// unknown session id, as for a UUID.
+#[test]
+fn an_unknown_opencode_or_kimi_session_id_empties_the_list_and_names_the_id() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = app_with_codex_conversation(&dir);
+
+    for absent in ["ses_019b3a2f6c1eVn8tQxL0mZ4kRp", "session_20260907_absent"] {
+        app.set_query_for_test(absent);
+        app.update_filter();
+
+        assert!(app.filtered().is_empty(), "{absent} listed a session");
+        assert!(app.is_session_id_query(), "{absent} ran as a text search");
+        assert_eq!(app.unresolved_session_id(), Some(absent));
+    }
+}
+
+/// A partial OpenCode id is text, so it must search transcripts rather than
+/// report a session absent.
+#[test]
+fn a_partial_opencode_session_id_is_a_text_search() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = app_with_codex_conversation(&dir);
+
+    app.set_query_for_test("ses_019b3a2f");
+    app.update_filter();
+
+    assert!(!app.is_session_id_query());
+    assert_eq!(app.unresolved_session_id(), None);
+}
+
 /// One character short of an id, the query is text, so the list must not
 /// mark it as a session id.
 #[test]

@@ -122,6 +122,12 @@ pub trait SessionProvider: Sync {
     /// the parent. The caller reports the counts rather than deleting silently.
     fn delete_session(&self, path: &Path) -> Result<Deleted>;
 
+    /// True when `query` has the shape of an id this provider writes, so a
+    /// lookup that misses means the session is absent rather than that the
+    /// query was text. A provider whose sessions resolve by id only once
+    /// listed accepts nothing.
+    fn is_session_id_shape(&self, query: &str) -> bool;
+
     /// The session `session_id` names, as the stub discovery would report for
     /// it under the root that holds it, or `None` when this provider stores no
     /// such session.
@@ -130,6 +136,8 @@ pub trait SessionProvider: Sync {
     /// its sessions and must not parse a transcript in full. A sub-agent
     /// transcript's id resolves too, to a stub of its own with its nested
     /// sub-agents: the one exception to every filter the list applies.
+    /// A query that fails [`is_session_id_shape`](Self::is_session_id_shape)
+    /// resolves to `None` without a lookup.
     fn resolve_session_id(&self, session_id: &str) -> Result<Option<ResolvedSession>>;
 
     /// Every session `session_id` names, found by whatever means this provider
@@ -160,6 +168,14 @@ static PROVIDERS: &[&dyn SessionProvider] = &[&CLAUDE, &CODEX, &OPENCODE, &KIMI,
 
 pub fn providers() -> &'static [&'static dyn SessionProvider] {
     PROVIDERS
+}
+
+/// True when `query` has the shape of a session id some agent writes, so a
+/// lookup that misses is an unknown session id rather than text to search for.
+pub fn is_session_id_shape(query: &str) -> bool {
+    providers()
+        .iter()
+        .any(|provider| provider.is_session_id_shape(query))
 }
 
 /// The agent that recorded `session_id` and the session as it stored it.
@@ -304,6 +320,17 @@ mod tests {
                 provider.labels().name
             );
         }
+    }
+
+    /// The registry's answer is the union of the providers', so a miss on a
+    /// query shaped like any agent's id reports the session absent.
+    #[test]
+    fn a_query_has_a_session_id_shape_when_any_provider_writes_ids_like_it() {
+        assert!(is_session_id_shape("019f0000-0000-7000-8000-00000000000a"));
+        assert!(is_session_id_shape("ses_019b3a2f6c1eVn8tQxL0mZ4kRp"));
+        assert!(is_session_id_shape("session_20260907_abcdef"));
+        assert!(!is_session_id_shape("deployment"));
+        assert!(!is_session_id_shape("ses_019b"));
     }
 
     #[test]

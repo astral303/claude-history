@@ -774,31 +774,31 @@ fn opencode_sessions_support_agent_search_read_and_direct_render() {
             INSERT INTO project (id, worktree, time_created, time_updated, sandboxes)
             VALUES ('proj_e2e', '/tmp/opencode-project', 1755000000000, 1755000000000, '[]');
             INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, time_created, time_updated)
-            VALUES ('ses_e2e_parent', 'proj_e2e', NULL, 'e2e', '/tmp/opencode-project', 'opencode e2e session', '1.0.0', 1755000100000, 1755000400000),
-                   ('ses_e2e_child', 'proj_e2e', 'ses_e2e_parent', 'e2e-child', '/tmp/opencode-project', '', '1.0.0', 1755000150000, 1755000300000);
+            VALUES ('ses_019b3a2f6c00E2eParentA00Xz', 'proj_e2e', NULL, 'e2e', '/tmp/opencode-project', 'opencode e2e session', '1.0.0', 1755000100000, 1755000400000),
+                   ('ses_019b3a2f6c32E2eChildB000Yw', 'proj_e2e', 'ses_019b3a2f6c00E2eParentA00Xz', 'e2e-child', '/tmp/opencode-project', '', '1.0.0', 1755000150000, 1755000300000);
             INSERT INTO message (id, session_id, time_created, time_updated, data)
-            VALUES ('msg_user', 'ses_e2e_parent', 1755000100000, 1755000100000,
+            VALUES ('msg_user', 'ses_019b3a2f6c00E2eParentA00Xz', 1755000100000, 1755000100000,
                     '{"role":"user","time":{"created":1755000100000}}'),
-                   ('msg_asst', 'ses_e2e_parent', 1755000200000, 1755000200000,
+                   ('msg_asst', 'ses_019b3a2f6c00E2eParentA00Xz', 1755000200000, 1755000200000,
                     '{"role":"assistant","time":{"created":1755000200000},"modelID":"claude-opus-4-6","providerID":"anthropic"}'),
-                   ('msg_child_user', 'ses_e2e_child', 1755000150000, 1755000150000,
+                   ('msg_child_user', 'ses_019b3a2f6c32E2eChildB000Yw', 1755000150000, 1755000150000,
                     '{"role":"user","time":{"created":1755000150000}}'),
-                   ('msg_child_asst', 'ses_e2e_child', 1755000160000, 1755000160000,
+                   ('msg_child_asst', 'ses_019b3a2f6c32E2eChildB000Yw', 1755000160000, 1755000160000,
                     '{"role":"assistant","time":{"created":1755000160000}}');
             INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
-            VALUES ('prt_user', 'msg_user', 'ses_e2e_parent', 1755000100000, 1755000100000,
+            VALUES ('prt_user', 'msg_user', 'ses_019b3a2f6c00E2eParentA00Xz', 1755000100000, 1755000100000,
                     '{"type":"text","text":"active opencode question","time":{"start":1755000100000}}'),
-                   ('prt_user_s1_call', 'msg_user', 'ses_e2e_parent', 1755000100000, 1755000100000,
+                   ('prt_user_s1_call', 'msg_user', 'ses_019b3a2f6c00E2eParentA00Xz', 1755000100000, 1755000100000,
                     '{"type":"text","synthetic":true,"text":"Called the Read tool with the following input: {\"filePath\":\"/tmp/opencode-project/README.md\"}"}'),
-                   ('prt_user_s2_body', 'msg_user', 'ses_e2e_parent', 1755000100000, 1755000100000,
+                   ('prt_user_s2_body', 'msg_user', 'ses_019b3a2f6c00E2eParentA00Xz', 1755000100000, 1755000100000,
                     '{"type":"text","synthetic":true,"text":"SYNTHETIC_SENTINEL dumped file body"}'),
-                   ('prt_framing', 'msg_asst', 'ses_e2e_parent', 1755000200000, 1755000200000,
+                   ('prt_framing', 'msg_asst', 'ses_019b3a2f6c00E2eParentA00Xz', 1755000200000, 1755000200000,
                     '{"type":"step-start","snapshot":"SNAPSHOT_SENTINEL"}'),
-                   ('prt_answer', 'msg_asst', 'ses_e2e_parent', 1755000210000, 1755000210000,
+                   ('prt_answer', 'msg_asst', 'ses_019b3a2f6c00E2eParentA00Xz', 1755000210000, 1755000210000,
                     '{"type":"text","text":"opencode answer searchable","time":{"start":1755000210000}}'),
-                   ('prt_child_user', 'msg_child_user', 'ses_e2e_child', 1755000150000, 1755000150000,
+                   ('prt_child_user', 'msg_child_user', 'ses_019b3a2f6c32E2eChildB000Yw', 1755000150000, 1755000150000,
                     '{"type":"text","text":"child prompt","time":{"start":1755000150000}}'),
-                   ('prt_child_answer', 'msg_child_asst', 'ses_e2e_child', 1755000160000, 1755000160000,
+                   ('prt_child_answer', 'msg_child_asst', 'ses_019b3a2f6c32E2eChildB000Yw', 1755000160000, 1755000160000,
                     '{"type":"text","text":"opencode child answer searchable","time":{"start":1755000160000}}');
             "#,
         )
@@ -810,7 +810,7 @@ fn opencode_sessions_support_agent_search_read_and_direct_render() {
         &database,
         &["agent", "search", "--lexical", "active opencode question"],
     ));
-    assert_shows(&search_text, "uuid=ses_e2e_parent");
+    assert_shows(&search_text, "uuid=ses_019b3a2f6c00E2eParentA00Xz");
     assert!(
         !search_text.contains("kind=skipped"),
         "a folded child session is reachable through its parent, not skipped: {search_text}"
@@ -821,7 +821,7 @@ fn opencode_sessions_support_agent_search_read_and_direct_render() {
         &["agent", "search", "--lexical", "SYNTHETIC_SENTINEL"],
     ));
     assert!(
-        synthetic.contains("uuid=ses_e2e_parent"),
+        synthetic.contains("uuid=ses_019b3a2f6c00E2eParentA00Xz"),
         "an @-file injection indexes as tool output, like a real read: {synthetic}"
     );
     let reference = first_ref(&search_text);
@@ -838,8 +838,8 @@ fn opencode_sessions_support_agent_search_read_and_direct_render() {
             "opencode child answer searchable",
         ],
     ));
-    assert_shows(&folded_text, "uuid=ses_e2e_parent");
-    assert_hides(&folded_text, "uuid=ses_e2e_child");
+    assert_shows(&folded_text, "uuid=ses_019b3a2f6c00E2eParentA00Xz");
+    assert_hides(&folded_text, "uuid=ses_019b3a2f6c32E2eChildB000Yw");
 
     let read_text = stdout_of(&run_opencode(
         config.path(),
@@ -859,14 +859,15 @@ fn opencode_sessions_support_agent_search_read_and_direct_render() {
     assert_shows(&cold_read_text, "opencode answer searchable");
 
     // A locator is renderable like a file: the sniffed path decodes it
-    // because its parent is the database file.
-    let rendered = stdout_of(
-        &Command::new(binary())
-            .args(["--no-color", "--render"])
-            .arg(database.join("ses_e2e_parent.jsonl"))
-            .output()
-            .expect("render OpenCode locator"),
-    );
+    // because its parent is the database file. The database must be the one
+    // the provider lists, or the parent's sub-agents do not resolve.
+    let locator = database.join("ses_019b3a2f6c00E2eParentA00Xz.jsonl");
+    let locator = locator.to_str().expect("locator path is UTF-8");
+    let rendered = stdout_of(&run_opencode(
+        config.path(),
+        &database,
+        &["--no-color", "--render", locator],
+    ));
     assert_shows(&rendered, "active opencode question");
     assert_shows(&rendered, "opencode answer searchable");
     assert!(
@@ -875,13 +876,11 @@ fn opencode_sessions_support_agent_search_read_and_direct_render() {
     );
 
     // With tools shown, the injection renders as the read it narrates.
-    let rendered_tools = stdout_of(
-        &Command::new(binary())
-            .args(["--no-color", "--show-tools", "--render"])
-            .arg(database.join("ses_e2e_parent.jsonl"))
-            .output()
-            .expect("render OpenCode locator with tools"),
-    );
+    let rendered_tools = stdout_of(&run_opencode(
+        config.path(),
+        &database,
+        &["--no-color", "--show-tools", "--render", locator],
+    ));
     assert_shows(&rendered_tools, "SYNTHETIC_SENTINEL");
     assert!(
         !rendered_tools.contains("Called the Read tool"),
@@ -892,6 +891,14 @@ fn opencode_sessions_support_agent_search_read_and_direct_render() {
         !rendered.contains("opencode child answer searchable"),
         "spliced child turns hide behind the thinking toggle, as for Claude: {rendered}"
     );
+
+    // With thinking shown, the child's turns render spliced into the parent.
+    let rendered_thinking = stdout_of(&run_opencode(
+        config.path(),
+        &database,
+        &["--no-color", "--show-thinking", "--render", locator],
+    ));
+    assert_shows(&rendered_thinking, "opencode child answer searchable");
 }
 
 #[test]
