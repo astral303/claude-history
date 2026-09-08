@@ -71,6 +71,8 @@
 - Fix a Pi or OMP tool result row showing no timestamp with `i` on, and a run's
   duration ending at its last call. A session ending in a tool result is now
   dated from that result.
+- Fix `--delete <SESSION_ID>` refusing a Pi or OMP session as ambiguous when
+  `PI_CODING_AGENT_SESSION_DIR` points both agents at one directory.
 
 ### Internal: Codex session discovery
 

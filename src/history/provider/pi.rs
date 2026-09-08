@@ -1,5 +1,6 @@
 //! Pi coding agent sessions, stored under `~/.pi/agent/sessions/`.
 
+use super::walk::FileRoot;
 use super::{
     Deleted, DiscoveredSessions, PathResumeLauncher, RefNamespaces, ResolvedSession, SessionCache,
     SessionLauncher, SessionProvider, SessionRoot, SessionStorage, SessionStub, SourceLabels, walk,
@@ -69,9 +70,21 @@ impl SessionProvider for PiProvider {
     /// of every log under the root — affordable once, not per keystroke. Two
     /// logs in one project may state the same id, so more than one can match.
     fn find_sessions_by_id(&self, session_id: &str) -> Result<Vec<PathBuf>> {
-        let root = pi_loader::session_root()?;
-        pi_log::sessions_with_id(&root.root.path, root.depth, session_id)
+        sessions_pi_owns_with_id(&pi_loader::session_root()?, session_id)
     }
+}
+
+/// Every log under `root` stating `session_id` that the list attributes to Pi.
+/// A log with an OMP title slot is OMP's whichever directory holds it, and the
+/// two agents can share one, so it is left for OMP to find.
+fn sessions_pi_owns_with_id(root: &FileRoot, session_id: &str) -> Result<Vec<PathBuf>> {
+    let mut owned = Vec::new();
+    for path in pi_log::sessions_with_id(&root.root.path, root.depth, session_id)? {
+        if format::parse_owned_transcript(Source::Pi, &path)?.is_some() {
+            owned.push(path);
+        }
+    }
+    Ok(owned)
 }
 
 static LAUNCHER: PathResumeLauncher = PathResumeLauncher {
@@ -147,5 +160,19 @@ mod tests {
             PiProvider.delete_session(&sibling).is_err(),
             "a file Pi does not own must survive a delete aimed at it"
         );
+    }
+
+    #[test]
+    fn find_by_id_leaves_the_titled_log_in_a_shared_session_directory_to_omp() {
+        let directory = tempfile::tempdir().unwrap();
+        let (_, untitled) = pi_log::test_support::write_titled_and_untitled(directory.path());
+        let root = FileRoot {
+            root: SessionRoot::new(directory.path()),
+            depth: 0,
+        };
+
+        let found = sessions_pi_owns_with_id(&root, "omp_session_custom_id").unwrap();
+
+        assert_eq!(found, vec![untitled]);
     }
 }

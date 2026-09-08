@@ -1,7 +1,7 @@
 //! OMP sessions, stored under `~/.omp/agent/sessions/`, beside which OMP
 //! writes each session's artifacts.
 
-use super::walk::SessionFiles;
+use super::walk::{FileRoot, SessionFiles};
 use super::{
     Deleted, DiscoveredSessions, PathResumeLauncher, RefNamespaces, ResolvedSession, RootOrigin,
     SessionCache, SessionLauncher, SessionProvider, SessionRoot, SessionStorage, SessionStub,
@@ -10,7 +10,7 @@ use super::{
 use crate::cli::DebugLevel;
 use crate::debug;
 use crate::error::Result;
-use crate::history::format::{self, SessionFormat, pi_log};
+use crate::history::format::{self, SessionFormat, SessionProjection, pi_log};
 use crate::history::{Conversation, Source, omp_loader, parser};
 use std::path::{Path, PathBuf};
 
@@ -83,8 +83,33 @@ impl SessionProvider for OmpProvider {
     /// Read from the header, as Pi's is, and just as capable of repeating
     /// across two logs in one project.
     fn find_sessions_by_id(&self, session_id: &str) -> Result<Vec<PathBuf>> {
-        let root = omp_loader::session_root()?;
-        pi_log::sessions_with_id(&root.root.path, root.depth, session_id)
+        sessions_omp_owns_with_id(&omp_loader::session_root()?, session_id)
+    }
+}
+
+/// Every log under `root` stating `session_id` that the list attributes to
+/// OMP: those [`attributed_projection`] reads as OMP's.
+fn sessions_omp_owns_with_id(root: &FileRoot, session_id: &str) -> Result<Vec<PathBuf>> {
+    let mut owned = Vec::new();
+    for path in pi_log::sessions_with_id(&root.root.path, root.depth, session_id)? {
+        if attributed_projection(&root.root, &path)?
+            .is_some_and(|session| session.source == Source::Omp)
+        {
+            owned.push(path);
+        }
+    }
+    Ok(owned)
+}
+
+/// The log at `path` parsed by the reader `root` assigns. Everything under
+/// OMP's own tree is OMP's, title slot or not. A `PI_CODING_AGENT_SESSION_DIR`
+/// directory belongs to no one in particular, so its logs are left to the
+/// registry to attribute rather than claimed outright, and the projection there
+/// may name Pi.
+fn attributed_projection(root: &SessionRoot, path: &Path) -> Result<Option<SessionProjection>> {
+    match root.origin() {
+        RootOrigin::AgentTree => pi_log::OMP_LOG.parse_transcript(path),
+        RootOrigin::Redirected => format::parse_transcript(path),
     }
 }
 
@@ -161,27 +186,21 @@ impl SessionStorage for OmpStorage {
         discover_sessions(root, omp_loader::session_root()?.depth)
     }
 
-    /// Everything under OMP's own tree is OMP's, title slot or not. A redirected
-    /// session directory belongs to no one in particular, so its session files
-    /// are left to the registry to attribute rather than claimed outright. The
-    /// artifacts directories beside them are OMP's own, so what they hold is
-    /// read as OMP's; the registry would read a file no format claims as a
-    /// Claude transcript.
+    /// The artifacts directories beside a session file are OMP's own, so what
+    /// they hold is read as OMP's; the registry would read a file no format
+    /// claims as a Claude transcript.
     fn parse_session(
         &self,
         stub: &SessionStub,
         root: &SessionRoot,
         debug_level: Option<DebugLevel>,
     ) -> Result<Option<Conversation>> {
-        match root.origin() {
-            RootOrigin::AgentTree => {
-                parser::process_session_file(stub, &pi_log::OMP_LOG, debug_level)
-            }
-            RootOrigin::Redirected => {
-                let session = format::parse_transcript(&stub.locator)?;
-                parser::process_projected_session(stub, session, &pi_log::OMP_LOG, debug_level)
-            }
-        }
+        parser::process_projected_session(
+            stub,
+            attributed_projection(root, &stub.locator)?,
+            &pi_log::OMP_LOG,
+            debug_level,
+        )
     }
 
     fn max_session_bytes(&self) -> Option<u64> {
@@ -464,6 +483,34 @@ mod tests {
                 .all(|index| dispatched < *index && *index < answered),
             "thread entries at {positions:?} sit outside {dispatched}..{answered}"
         );
+    }
+
+    #[test]
+    fn find_by_id_leaves_the_untitled_log_in_a_shared_session_directory_to_pi() {
+        let directory = tempfile::tempdir().unwrap();
+        let (titled, _) = pi_log::test_support::write_titled_and_untitled(directory.path());
+        let root = FileRoot {
+            root: SessionRoot::new(directory.path()),
+            depth: 0,
+        };
+
+        let found = sessions_omp_owns_with_id(&root, "omp_session_custom_id").unwrap();
+
+        assert_eq!(found, vec![titled]);
+    }
+
+    #[test]
+    fn find_by_id_keeps_every_log_under_omps_own_tree() {
+        let directory = tempfile::tempdir().unwrap();
+        let (titled, untitled) = pi_log::test_support::write_titled_and_untitled(directory.path());
+        let root = FileRoot {
+            root: SessionRoot::new(directory.path()).in_agent_tree(),
+            depth: 0,
+        };
+
+        let found = sessions_omp_owns_with_id(&root, "omp_session_custom_id").unwrap();
+
+        assert_eq!(found, vec![titled, untitled]);
     }
 
     /// A transcript with no OMP title slot cannot say which agent wrote it, so the
