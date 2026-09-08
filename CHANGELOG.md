@@ -25,6 +25,8 @@
   its truncated input and result one at a time; they now act on both together.
 - Output with one line truncated now simply shows that line instead of
   `(1 more lines...)`.
+- Trim opening blank lines from a command's output so the `Result` row is
+  never empty.
 - Fix a finished Claude Code background agent or background command showing
   under `You` as rows of `<task-notification>` machine state. It now shows as
   a `Task` row: the summary, then for an agent its tokens, tool calls and

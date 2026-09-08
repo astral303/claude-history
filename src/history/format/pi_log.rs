@@ -4,6 +4,7 @@ mod tools;
 
 use super::{
     SessionFormat, SessionHeader, SessionProjection, append_exit_code, append_output_note,
+    trim_blank_lines,
 };
 use crate::agent::transcript::bounded_tool_result_text;
 use crate::error::{AppError, Result};
@@ -608,11 +609,8 @@ fn tool_result_content(object: &Map<String, Value>) -> Value {
 /// and a cancellation. The command itself is the call's input, not part of its
 /// result.
 fn bash_output(object: &Map<String, Value>) -> String {
-    let mut text = object
-        .get("output")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_owned();
+    let mut text =
+        trim_blank_lines(object.get("output").and_then(Value::as_str).unwrap_or("")).to_owned();
     if let Some(code) = object.get("exitCode").and_then(Value::as_i64)
         && code != 0
     {
