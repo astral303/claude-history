@@ -510,7 +510,7 @@ fn format_run_duration(started_at: Option<&str>, ended_at: Option<&str>) -> Opti
 
 /// Whole units, truncated: `1h 5m` from an hour, `2m` from a minute, `40s`
 /// below that.
-fn format_coarse_duration(seconds: u64) -> String {
+pub(crate) fn format_coarse_duration(seconds: u64) -> String {
     let minutes = seconds / 60;
     if minutes >= 60 {
         return format!("{}h {}m", minutes / 60, minutes % 60);

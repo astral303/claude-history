@@ -224,12 +224,7 @@ fn conversation_from_projection(
 fn latest_activity_timestamp(entries: &[(usize, LogEntry)]) -> Option<DateTime<Local>> {
     entries
         .iter()
-        .filter_map(|(_, entry)| match entry {
-            LogEntry::User { timestamp, .. } | LogEntry::Assistant { timestamp, .. } => {
-                timestamp.as_deref()
-            }
-            _ => None,
-        })
+        .filter_map(|(_, entry)| entry.activity_timestamp())
         .filter_map(|timestamp| DateTime::parse_from_rfc3339(timestamp).ok())
         .map(|timestamp| timestamp.with_timezone(&Local))
         .max()
@@ -303,11 +298,11 @@ fn user_turn_text(message: &crate::log_entry::UserMessage) -> UserTurnText {
 
 impl ConversationBuilder {
     fn push(&mut self, entry: LogEntry) {
+        self.record_activity_timestamp(&entry);
         match entry {
             LogEntry::User {
                 message,
                 cwd,
-                timestamp,
                 usage,
                 ..
             } => {
@@ -316,14 +311,6 @@ impl ConversationBuilder {
                         + usage.output_tokens
                         + usage.cache_creation_input_tokens
                         + usage.cache_read_input_tokens;
-                }
-                if let Some(ref ts_str) = timestamp
-                    && let Ok(ts) = chrono::DateTime::parse_from_rfc3339(ts_str)
-                {
-                    if self.first_timestamp.is_none() {
-                        self.first_timestamp = Some(ts);
-                    }
-                    self.last_timestamp = Some(ts);
                 }
 
                 // Extract cwd from the first user message that has it
@@ -382,22 +369,12 @@ impl ConversationBuilder {
                     }
                 }
             }
-            LogEntry::Assistant {
-                message, timestamp, ..
-            } => {
+            LogEntry::Assistant { message, .. } => {
                 let assistant_message_id = message.id.clone();
                 let canonical_ordinal = assistant_message_id
                     .as_ref()
                     .and_then(|id| self.assistant_id_ordinals.get(id).copied())
                     .unwrap_or(self.message_count + 1);
-                if let Some(ref ts_str) = timestamp
-                    && let Ok(ts) = chrono::DateTime::parse_from_rfc3339(ts_str)
-                {
-                    if self.first_timestamp.is_none() {
-                        self.first_timestamp = Some(ts);
-                    }
-                    self.last_timestamp = Some(ts);
-                }
 
                 // Extract model name from first assistant message that has it
                 if self.extracted_model.is_none()
@@ -551,6 +528,21 @@ impl ConversationBuilder {
             LogEntry::System { .. } => {}
             _ => {}
         }
+    }
+
+    /// Widens the span `duration_minutes` is computed from to include the
+    /// entry, when it carries an activity timestamp that parses.
+    fn record_activity_timestamp(&mut self, entry: &LogEntry) {
+        let Some(ts) = entry
+            .activity_timestamp()
+            .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+        else {
+            return;
+        };
+        if self.first_timestamp.is_none() {
+            self.first_timestamp = Some(ts);
+        }
+        self.last_timestamp = Some(ts);
     }
 
     /// The accumulated conversation, or `None` when it holds nothing worth

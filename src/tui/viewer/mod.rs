@@ -25,6 +25,7 @@ mod timing;
 mod tools;
 
 pub use output::{LineStyle, RenderedLine};
+pub(crate) use summary::format_coarse_duration;
 
 use calls::{CallRanges, top_level_tool_blocks};
 use entry::render_entry;

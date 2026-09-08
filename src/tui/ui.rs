@@ -12,7 +12,7 @@ use crate::tui::app::{
     ViewState, list_lines_per_item,
 };
 use crate::tui::theme::{self, Theme};
-use crate::tui::viewer::{LineStyle, RenderedLine};
+use crate::tui::viewer::{LineStyle, RenderedLine, format_coarse_duration};
 use chrono::{DateTime, Local};
 use ratatui::layout::Position;
 use ratatui::prelude::*;
@@ -475,13 +475,8 @@ fn header_fits_single_line(conv: &crate::history::Conversation, terminal_width: 
     let timestamp_len = 16;
 
     // Duration length (if present): " · Xm" or " · Xh Ym" etc.
-    let duration_len = conv.duration_minutes.map_or(0, |m| {
-        let formatted = if m >= 60 {
-            format!("{}h {}m", m / 60, m % 60)
-        } else {
-            format!("{}m", m)
-        };
-        3 + formatted.len() // " · " + duration
+    let duration_len = conv.duration_minutes.map_or(0, |minutes| {
+        3 + format_coarse_duration(minutes * 60).len() // " · " + duration
     });
 
     // Format: "  project · custom_title · model · msg_count · duration · tokens · timestamp · summary"
@@ -603,14 +598,9 @@ fn render_view_header(frame: &mut Frame, app: &App, state: &ViewState, area: Rec
         } else {
             format!("{} messages", conv.message_count)
         };
-        // Format conversation duration
-        let duration = conv.duration_minutes.map(|m| {
-            if m >= 60 {
-                format!("{}h {}m", m / 60, m % 60)
-            } else {
-                format!("{}m", m)
-            }
-        });
+        let duration = conv
+            .duration_minutes
+            .map(|minutes| format_coarse_duration(minutes * 60));
 
         // Calculate header length to determine if long token format fits
         let custom_title_len = custom_title
@@ -1658,14 +1648,9 @@ fn render_list(frame: &mut Frame, app: &App, area: Rect) {
                 format!("{} msgs", conv.message_count)
             };
 
-            // Format conversation duration (only if > 0 minutes)
-            let duration = conv.duration_minutes.map(|m| {
-                if m >= 60 {
-                    format!("{}h {}m", m / 60, m % 60)
-                } else {
-                    format!("{}m", m)
-                }
-            });
+            let duration = conv
+                .duration_minutes
+                .map(|minutes| format_coarse_duration(minutes * 60));
 
             // Selection indicator: vertical bar for all rows (with left padding)
             let indicator = " ▌ ";
