@@ -616,7 +616,7 @@ mod tests {
             7,
             SemanticIndexResponse {
                 hits: vec![crate::semantic::types::SemanticHit::new(
-                    expected_score_breakdown.clone(),
+                    expected_score_breakdown,
                     expected_explanation.clone(),
                 )],
                 chunk_hits: Vec::new(),

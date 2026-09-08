@@ -305,7 +305,7 @@ fn run() -> Result<()> {
     if let Some(ref query) = args.debug_search {
         let mut conversations = history::load_all_conversations(show_last, args.debug)?;
         conversations.retain(|conversation| time_filter.matches(conversation.timestamp));
-        conversations.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        conversations.sort_by_key(|conversation| std::cmp::Reverse(conversation.timestamp));
 
         let searchable = search::precompute_search_text(&conversations);
         let now = chrono::Local::now();
@@ -376,7 +376,7 @@ fn run() -> Result<()> {
     if let Some(ref query) = args.debug_semantic_search {
         let mut conversations = history::load_all_conversations(show_last, args.debug)?;
         conversations.retain(|conversation| time_filter.matches(conversation.timestamp));
-        conversations.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        conversations.sort_by_key(|conversation| std::cmp::Reverse(conversation.timestamp));
         return semantic_cli::debug_search(query, &conversations, args.local);
     }
 
@@ -389,7 +389,7 @@ fn run() -> Result<()> {
             ));
         }
         let mut conversations = history::load_all_conversations(show_last, args.debug)?;
-        conversations.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        conversations.sort_by_key(|conversation| std::cmp::Reverse(conversation.timestamp));
         return semantic_cli::generate_cache(&conversations, args.local);
     }
 
@@ -401,7 +401,7 @@ fn run() -> Result<()> {
     if let Some(ref query) = args.semantic_search {
         let mut conversations = history::load_all_conversations(show_last, args.debug)?;
         conversations.retain(|conversation| time_filter.matches(conversation.timestamp));
-        conversations.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        conversations.sort_by_key(|conversation| std::cmp::Reverse(conversation.timestamp));
         return semantic_cli::run(query, &conversations, args.semantic_top, args.local);
     }
 

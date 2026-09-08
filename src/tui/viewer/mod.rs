@@ -29,8 +29,8 @@ pub use output::{LineStyle, RenderedLine};
 use calls::{CallRanges, top_level_tool_blocks};
 use entry::render_entry;
 use summary::{
-    PendingToolSummary, RunAuthor, UserToolEntry, classify_user_tool_entry, flush_tool_summary,
-    tool_only_assistant_summary,
+    PendingToolSummary, RunAuthor, ToolOnlyReply, UserToolEntry, classify_user_tool_entry,
+    flush_tool_summary, tool_only_assistant_summary,
 };
 use tools::make_tool_summary_output_id;
 
@@ -263,9 +263,11 @@ pub fn render_parsed_conversation(
     entries: &[RenderableEntry],
     options: &RenderOptions,
 ) -> RenderedConversation {
-    let mut lines = Vec::new();
-    let mut messages = Vec::new();
-    let mut calls = Vec::new();
+    let mut rendered = RenderedConversation {
+        lines: Vec::new(),
+        messages: Vec::new(),
+        calls: Vec::new(),
+    };
     let mut pending_tool_summary: Option<PendingToolSummary> = None;
     // Summary mode pairs the calls of each expanded run as the run renders;
     // the detail modes pair every top-level call of the conversation.
@@ -284,9 +286,7 @@ pub fn render_parsed_conversation(
     for (parsed_idx, parsed) in entries.iter().enumerate() {
         if options.tool_display.is_summary()
             && try_extend_or_start_pending_summary(
-                &mut lines,
-                &mut messages,
-                &mut calls,
+                &mut rendered,
                 &mut pending_tool_summary,
                 entries,
                 parsed_idx,
@@ -313,50 +313,38 @@ pub fn render_parsed_conversation(
             continue;
         }
 
-        flush_tool_summary(
-            &mut lines,
-            &mut messages,
-            &mut calls,
-            &mut pending_tool_summary,
-            entries,
+        flush_tool_summary(&mut rendered, &mut pending_tool_summary, entries, options);
+
+        let first_row = rendered.lines.len();
+        append_entry_with_range(
+            &mut rendered.lines,
+            &mut rendered.messages,
+            parsed,
+            entry_lines,
             options,
         );
-
-        let first_row = lines.len();
-        append_entry_with_range(&mut lines, &mut messages, parsed, entry_lines, options);
         for block in tool_blocks {
             call_ranges.record(block.offset_by(first_row));
         }
     }
 
-    flush_tool_summary(
-        &mut lines,
-        &mut messages,
-        &mut calls,
-        &mut pending_tool_summary,
-        entries,
-        options,
-    );
+    flush_tool_summary(&mut rendered, &mut pending_tool_summary, entries, options);
     // `]` steps through the calls of an expanded run; in the detail modes it
     // steps through messages, so their calls are drawn but not returned.
     let mut detail_calls = call_ranges.into_calls();
 
     postprocess_blank_lines(
-        &mut lines,
-        &mut messages,
-        calls.iter_mut().chain(&mut detail_calls),
+        &mut rendered.lines,
+        &mut rendered.messages,
+        rendered.calls.iter_mut().chain(&mut detail_calls),
     );
     connectors::draw_connectors(
-        &mut lines,
-        calls.iter().chain(&detail_calls),
+        &mut rendered.lines,
+        rendered.calls.iter().chain(&detail_calls),
         options.show_timing,
     );
 
-    RenderedConversation {
-        lines,
-        messages,
-        calls,
-    }
+    rendered
 }
 
 /// The agent whose session this is, named by the first top-level reply that
@@ -379,9 +367,7 @@ fn session_agent(entries: &[RenderableEntry]) -> Option<&str> {
 /// Returns `true` when the entry was absorbed into (or started) a pending
 /// summary group and should be skipped by the normal render path.
 fn try_extend_or_start_pending_summary(
-    lines: &mut Vec<RenderedLine>,
-    messages: &mut Vec<MessageRange>,
-    calls: &mut Vec<CallRange>,
+    rendered: &mut RenderedConversation,
     pending: &mut Option<PendingToolSummary>,
     entries: &[RenderableEntry],
     parsed_idx: usize,
@@ -392,13 +378,15 @@ fn try_extend_or_start_pending_summary(
     let entry_index = parsed.entry_index;
     let entry = &parsed.entry;
 
-    if let Some((parent_id, agent, timestamp, summary)) =
-        tool_only_assistant_summary(entry, options)
+    if let Some(ToolOnlyReply {
+        parent_id,
+        agent,
+        timestamp,
+        summary,
+    }) = tool_only_assistant_summary(entry, options)
     {
         extend_or_start(
-            lines,
-            messages,
-            calls,
+            rendered,
             pending,
             entries,
             options,
@@ -422,9 +410,7 @@ fn try_extend_or_start_pending_summary(
             summary,
         }) => {
             extend_or_start(
-                lines,
-                messages,
-                calls,
+                rendered,
                 pending,
                 entries,
                 options,
@@ -457,9 +443,7 @@ fn try_extend_or_start_pending_summary(
 /// Extend the open run with `candidate`, or flush it and let `candidate` open
 /// the next one.
 fn extend_or_start(
-    lines: &mut Vec<RenderedLine>,
-    messages: &mut Vec<MessageRange>,
-    calls: &mut Vec<CallRange>,
+    rendered: &mut RenderedConversation,
     pending: &mut Option<PendingToolSummary>,
     entries: &[RenderableEntry],
     options: &RenderOptions,
@@ -471,7 +455,7 @@ fn extend_or_start(
             run.summary.merge(candidate.summary);
         }
         _ => {
-            flush_tool_summary(lines, messages, calls, pending, entries, options);
+            flush_tool_summary(rendered, pending, entries, options);
             *pending = Some(candidate);
         }
     }

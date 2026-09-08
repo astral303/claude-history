@@ -544,7 +544,7 @@ mod tests {
         FakeEmbedder,
         Vec<usize>,
     ) {
-        let conversations = vec![test_conversation(
+        let conversations = [test_conversation(
             "/projects/project-a/session-1.jsonl",
             "one",
             vec!["visible alpha".to_string()],
@@ -681,7 +681,7 @@ mod tests {
 
     #[test]
     fn semantic_index_candidates_use_selected_slice_indices() {
-        let conversations = vec![
+        let conversations = [
             test_conversation(
                 "/projects/project-a/session-1.jsonl",
                 "one",
@@ -728,7 +728,7 @@ mod tests {
             vec![],
         );
         let miss = test_conversation("/projects/project-a/session-3.jsonl", "other", vec![]);
-        let conversations = vec![older, newer, miss];
+        let conversations = [older, newer, miss];
         let selected = conversations.iter().collect::<Vec<_>>();
         let parsed = ParsedQuery::parse("\"literal needle\"");
 
@@ -740,7 +740,7 @@ mod tests {
     #[test]
     fn quoted_uuid_exact_fallback_is_literal_search() {
         let uuid = "e7d318b1-4274-4ee2-a341-e94893b5df49";
-        let conversations = vec![
+        let conversations = [
             test_conversation("/projects/project-a/session-1.jsonl", uuid, vec![]),
             test_conversation("/projects/project-a/session-2.jsonl", "other", vec![]),
         ];
@@ -755,7 +755,7 @@ mod tests {
 
     #[test]
     fn semantic_filters_use_smart_case_literals() {
-        let conversations = vec![
+        let conversations = [
             test_conversation(
                 "/projects/project-a/session-1.jsonl",
                 "restaurant_signals lower phrase",

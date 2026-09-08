@@ -446,15 +446,22 @@ fn export_entries(
         .map_err(|error| std::io::Error::other(error.to_string()))
 }
 
-fn generate_plain_or_markdown_content(
+/// The row one export format writes for each kind of content the shared walk
+/// in [`generate_rows`] visits. `prefix` marks a sub-agent's entry.
+trait ExportRowWriter {
+    fn text(&self, output: &mut String, prefix: &str, speaker: &str, text: &str);
+    fn user_tool_call(&self, output: &mut String, prefix: &str, formatted: &str);
+    fn tool_result(&self, output: &mut String, prefix: &str, label: &str, content: &str);
+    fn assistant_tool_call(&self, output: &mut String, prefix: &str, name: &str, formatted: &str);
+    fn thinking(&self, output: &mut String, prefix: &str, thinking: &str);
+}
+
+const UNNAMED_TOOL_RESULT_LABEL: &str = "Tool Result";
+
+fn generate_rows(
     entries: Vec<(usize, LogEntry)>,
     options: ExportOptions,
-    mut handle_user_text: impl FnMut(&mut String, &str, &str, &str),
-    mut handle_user_tool_call: impl FnMut(&mut String, &str, &str),
-    mut handle_user_tool_result: impl FnMut(&mut String, &str, &str, Option<&str>),
-    mut handle_assistant_text: impl FnMut(&mut String, &str, &str, &str),
-    mut handle_assistant_tool_use: impl FnMut(&mut String, &str, &str, Tool, &serde_json::Value),
-    mut handle_assistant_thinking: impl FnMut(&mut String, &str, &str),
+    writer: &impl ExportRowWriter,
 ) -> std::io::Result<String> {
     let mut output = String::new();
 
@@ -470,14 +477,15 @@ fn generate_plain_or_markdown_content(
                 }
                 let prefix = subagent_prefix(&parent_tool_use_id);
                 if let (speaker, Some(text)) = user_speaker_and_text(&message) {
-                    handle_user_text(&mut output, &prefix, speaker, &text);
+                    writer.text(&mut output, &prefix, speaker, &text);
                 }
                 for_user_tool_calls(&message, &options, |name, tool, input| {
                     let formatted = format_tool_call_for_export(name, tool, input);
-                    handle_user_tool_call(&mut output, &prefix, &formatted);
+                    writer.user_tool_call(&mut output, &prefix, &formatted);
                 });
                 for_user_tool_results(&message, &options, |content, name| {
-                    handle_user_tool_result(&mut output, &prefix, content, name);
+                    let label = name.unwrap_or(UNNAMED_TOOL_RESULT_LABEL);
+                    writer.tool_result(&mut output, &prefix, label, content);
                 });
             }
             LogEntry::Assistant {
@@ -494,15 +502,16 @@ fn generate_plain_or_markdown_content(
                 for block in &message.content {
                     match block {
                         ContentBlock::Text { text } => {
-                            handle_assistant_text(&mut output, &prefix, speaker, text);
+                            writer.text(&mut output, &prefix, speaker, text);
                         }
                         ContentBlock::ToolUse {
                             name, tool, input, ..
                         } if options.show_tools => {
-                            handle_assistant_tool_use(&mut output, &prefix, name, *tool, input);
+                            let formatted = format_tool_call_for_export(name, *tool, input);
+                            writer.assistant_tool_call(&mut output, &prefix, name, &formatted);
                         }
                         ContentBlock::Thinking { thinking, .. } if options.show_thinking => {
-                            handle_assistant_thinking(&mut output, &prefix, thinking);
+                            writer.thinking(&mut output, &prefix, thinking);
                         }
                         _ => {}
                     }
@@ -519,7 +528,7 @@ fn generate_plain_or_markdown_content(
                 } else {
                     format!("[{label}] {text}")
                 };
-                handle_user_text(&mut output, "", "You", &rendered);
+                writer.text(&mut output, "", "You", &rendered);
             }
             _ => {}
         }
@@ -528,72 +537,83 @@ fn generate_plain_or_markdown_content(
     Ok(output)
 }
 
-/// Generate plain text format (simple "Speaker: message" lines)
+/// `Speaker: message` lines.
+struct PlainRowWriter;
+
+impl ExportRowWriter for PlainRowWriter {
+    fn text(&self, output: &mut String, prefix: &str, speaker: &str, text: &str) {
+        output.push_str(&format!("{prefix}{speaker}: {text}\n\n"));
+    }
+
+    fn user_tool_call(&self, output: &mut String, prefix: &str, formatted: &str) {
+        output.push_str(&format!("{prefix}You: {formatted}\n\n"));
+    }
+
+    fn tool_result(&self, output: &mut String, prefix: &str, label: &str, content: &str) {
+        output.push_str(&format!("{prefix}{label}: {content}\n\n"));
+    }
+
+    fn assistant_tool_call(&self, output: &mut String, prefix: &str, _name: &str, formatted: &str) {
+        output.push_str(&format!("{prefix}Tool: {formatted}\n\n"));
+    }
+
+    fn thinking(&self, output: &mut String, prefix: &str, thinking: &str) {
+        output.push_str(&format!("{prefix}Thinking: {thinking}\n\n"));
+    }
+}
+
+/// `##` headers for speakers, `###` for calls, results and thinking, with
+/// call and result bodies fenced.
+struct MarkdownRowWriter;
+
+impl ExportRowWriter for MarkdownRowWriter {
+    fn text(&self, output: &mut String, prefix: &str, speaker: &str, text: &str) {
+        output.push_str(&format!("## {prefix}{speaker}\n\n{text}\n\n"));
+    }
+
+    fn user_tool_call(&self, output: &mut String, prefix: &str, formatted: &str) {
+        let fenced = markdown_code_fence(formatted);
+        output.push_str(&format!("## {prefix}You\n\n{fenced}\n\n"));
+    }
+
+    fn tool_result(&self, output: &mut String, prefix: &str, label: &str, content: &str) {
+        let fenced = markdown_code_fence(content);
+        output.push_str(&format!("### {prefix}{label}\n\n{fenced}\n\n"));
+    }
+
+    fn assistant_tool_call(&self, output: &mut String, prefix: &str, name: &str, formatted: &str) {
+        let fenced = markdown_code_fence(formatted);
+        output.push_str(&format!("### {prefix}Tool: {name}\n\n{fenced}\n\n"));
+    }
+
+    fn thinking(&self, output: &mut String, prefix: &str, thinking: &str) {
+        output.push_str(&format!("### {prefix}Thinking\n\n{thinking}\n\n"));
+    }
+}
+
 fn generate_plain(
     source: crate::history::Source,
     path: &Path,
     subagents: &[PathBuf],
     options: ExportOptions,
 ) -> std::io::Result<String> {
-    generate_plain_or_markdown_content(
+    generate_rows(
         export_entries(source, path, subagents)?,
         options,
-        |output, prefix, speaker, text| {
-            output.push_str(&format!("{prefix}{speaker}: {text}\n\n"));
-        },
-        |output, prefix, formatted| {
-            output.push_str(&format!("{}You: {}\n\n", prefix, formatted));
-        },
-        |output, prefix, content, name| {
-            let label = name.unwrap_or("Tool Result");
-            output.push_str(&format!("{prefix}{label}: {content}\n\n"));
-        },
-        |output, prefix, speaker, text| {
-            output.push_str(&format!("{}{speaker}: {}\n\n", prefix, text));
-        },
-        |output, prefix, name, tool, input| {
-            let formatted = format_tool_call_for_export(name, tool, input);
-            output.push_str(&format!("{}Tool: {}\n\n", prefix, formatted));
-        },
-        |output, prefix, thinking| {
-            output.push_str(&format!("{}Thinking: {}\n\n", prefix, thinking));
-        },
+        &PlainRowWriter,
     )
 }
 
-/// Generate markdown format (with ## headers for speakers)
 fn generate_markdown(
     source: crate::history::Source,
     path: &Path,
     subagents: &[PathBuf],
     options: ExportOptions,
 ) -> std::io::Result<String> {
-    generate_plain_or_markdown_content(
+    generate_rows(
         export_entries(source, path, subagents)?,
         options,
-        |output, prefix, speaker, text| {
-            output.push_str(&format!("## {prefix}{speaker}\n\n{text}\n\n"));
-        },
-        |output, prefix, formatted| {
-            let fenced = markdown_code_fence(formatted);
-            output.push_str(&format!("## {}You\n\n{}\n\n", prefix, fenced));
-        },
-        |output, prefix, content, name| {
-            let fenced = markdown_code_fence(content);
-            let label = name.unwrap_or("Tool Result");
-            output.push_str(&format!("### {prefix}{label}\n\n{fenced}\n\n"));
-        },
-        |output, prefix, speaker, text| {
-            output.push_str(&format!("## {}{speaker}\n\n{}\n\n", prefix, text));
-        },
-        |output, prefix, name, tool, input| {
-            let formatted = format_tool_call_for_export(name, tool, input);
-            let fenced = markdown_code_fence(&formatted);
-            output.push_str(&format!("### {}Tool: {}\n\n{}\n\n", prefix, name, fenced));
-        },
-        |output, prefix, thinking| {
-            output.push_str(&format!("### {}Thinking\n\n{}\n\n", prefix, thinking));
-        },
+        &MarkdownRowWriter,
     )
 }
 

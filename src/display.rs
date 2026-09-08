@@ -637,15 +637,13 @@ fn process_user_message<F: OutputFormatter>(
                             printed_content = true;
                         }
                     }
-                    ContentBlock::ToolResult { content, .. } => {
-                        if !no_tools {
-                            if let Some(ref id) = agent_id {
-                                formatter.format_agent_tool_result(id, content.as_ref());
-                            } else {
-                                formatter.format_tool_result(content.as_ref());
-                            }
-                            printed_content = true;
+                    ContentBlock::ToolResult { content, .. } if !no_tools => {
+                        if let Some(ref id) = agent_id {
+                            formatter.format_agent_tool_result(id, content.as_ref());
+                        } else {
+                            formatter.format_tool_result(content.as_ref());
                         }
+                        printed_content = true;
                     }
                     _ => {}
                 }

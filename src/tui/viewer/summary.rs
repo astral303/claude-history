@@ -228,7 +228,7 @@ pub(super) fn summarize_tool_activity(blocks: &[ContentBlock]) -> ToolActivitySu
             ContentBlock::ToolResult {
                 standalone_tool_name: Some(_),
                 ..
-            } => summary.add_call(Tool::ToolResultReceipt),
+            } => summary.add_call(Tool::ResultReceipt),
             _ => {}
         }
     }
@@ -242,15 +242,19 @@ fn assistant_blocks_are_tool_only(blocks: &[ContentBlock], show_thinking: bool) 
     })
 }
 
+/// An assistant entry holding only calls, which opens a run under the agent it
+/// names or extends the open one.
+pub(super) struct ToolOnlyReply<'a> {
+    pub parent_id: Option<&'a str>,
+    pub agent: Option<&'a str>,
+    pub timestamp: Option<&'a str>,
+    pub summary: ToolActivitySummary,
+}
+
 pub(super) fn tool_only_assistant_summary<'a>(
     entry: &'a LogEntry,
     options: &RenderOptions,
-) -> Option<(
-    Option<&'a str>,
-    Option<&'a str>,
-    Option<&'a str>,
-    ToolActivitySummary,
-)> {
+) -> Option<ToolOnlyReply<'a>> {
     let LogEntry::Assistant {
         message,
         agent,
@@ -272,12 +276,12 @@ pub(super) fn tool_only_assistant_summary<'a>(
     }
 
     let summary = summarize_tool_activity(&message.content);
-    (!summary.is_empty()).then_some((
-        parent_tool_use_id.as_deref(),
-        agent.as_deref(),
-        timestamp.as_deref(),
+    (!summary.is_empty()).then_some(ToolOnlyReply {
+        parent_id: parent_tool_use_id.as_deref(),
+        agent: agent.as_deref(),
+        timestamp: timestamp.as_deref(),
         summary,
-    ))
+    })
 }
 
 /// The run a user entry of tool blocks belongs to.
@@ -321,7 +325,7 @@ pub(super) fn classify_user_tool_entry<'a>(
         .any(|block| matches!(block, ContentBlock::ToolUse { .. }))
     {
         RunAuthor::User
-    } else if summary.count_of(Tool::ToolResultReceipt) > 0 {
+    } else if summary.count_of(Tool::ResultReceipt) > 0 {
         // The entry names no agent, so the run borrows the session's.
         RunAuthor::Agent(session_agent.map(str::to_string))
     } else {
@@ -535,9 +539,7 @@ fn summary_row_text(pending: &PendingToolSummary, expanded: bool, show_timing: b
 }
 
 pub(super) fn flush_tool_summary(
-    lines: &mut Vec<RenderedLine>,
-    messages: &mut Vec<MessageRange>,
-    calls: &mut Vec<CallRange>,
+    rendered: &mut RenderedConversation,
     pending: &mut Option<PendingToolSummary>,
     entries: &[RenderableEntry],
     options: &RenderOptions,
@@ -546,7 +548,7 @@ pub(super) fn flush_tool_summary(
         return;
     };
 
-    let start_line = lines.len();
+    let start_line = rendered.lines.len();
     let label = pending.label();
     let ts = if options.show_timing {
         pending.started_at.as_deref().and_then(format_timestamp)
@@ -563,7 +565,7 @@ pub(super) fn flush_tool_summary(
     // ids for their own toggles.
     let expanded = options.expanded_tool_outputs.contains(&pending.id);
     render_tool_activity_summary(
-        lines,
+        &mut rendered.lines,
         &SummaryRowSpec {
             label: &label,
             label_color: pending.label_color(),
@@ -575,17 +577,23 @@ pub(super) fn flush_tool_summary(
         },
     );
     if expanded {
-        render_summary_group_details(lines, calls, entries, &pending, options);
+        render_summary_group_details(
+            &mut rendered.lines,
+            &mut rendered.calls,
+            entries,
+            &pending,
+            options,
+        );
     }
 
-    let end_line = lines.len();
+    let end_line = rendered.lines.len();
     if end_line > start_line {
-        messages.push(MessageRange {
+        rendered.messages.push(MessageRange {
             entry_index: pending.first_entry_index,
             start_line,
             end_line,
         });
-        lines.push(RenderedLine::new(vec![]));
+        rendered.lines.push(RenderedLine::new(vec![]));
     }
 }
 

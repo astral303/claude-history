@@ -284,7 +284,7 @@ fn claude_and_auxiliary_conversations(
 
 fn finalize_conversations(conversations: &mut Vec<Conversation>) {
     deduplicate_conversations(conversations);
-    conversations.sort_by(|left, right| right.timestamp.cmp(&left.timestamp));
+    conversations.sort_by_key(|conversation| std::cmp::Reverse(conversation.timestamp));
     for (index, conversation) in conversations.iter_mut().enumerate() {
         conversation.index = index;
     }
@@ -705,7 +705,7 @@ pub fn list_projects(root: &Path) -> Result<Vec<Project>> {
         .collect();
 
     // Sort by recently modified
-    projects.sort_by(|a, b| b.modified.cmp(&a.modified));
+    projects.sort_by_key(|project| std::cmp::Reverse(project.modified));
 
     Ok(projects)
 }
@@ -798,7 +798,7 @@ pub fn load_conversations(
     }
 
     // Deterministic order after the parallel parse.
-    conversations.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    conversations.sort_by_key(|conversation| std::cmp::Reverse(conversation.timestamp));
 
     let fallback_path = projects_dir
         .file_name()

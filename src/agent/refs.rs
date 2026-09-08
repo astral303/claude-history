@@ -895,7 +895,7 @@ mod tests {
 
     #[test]
     fn validates_focus_inside_read_ranges() {
-        let reads = vec![parse_read_ref("ch_12345678:m2..m5").unwrap()];
+        let reads = [parse_read_ref("ch_12345678:m2..m5").unwrap()];
         let resolved = ResolvedConversation {
             key: key("project-a", "one.jsonl"),
             reference: AgentConversationRef::from_parts("project-a", "one.jsonl"),
@@ -914,7 +914,7 @@ mod tests {
 
     #[test]
     fn bare_focus_is_rejected_for_multiple_conversations() {
-        let reads = vec![
+        let reads = [
             parse_read_ref("ch_12345678:m1..m5").unwrap(),
             parse_read_ref("ch_87654321:m1..m5").unwrap(),
         ];

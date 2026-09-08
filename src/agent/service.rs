@@ -173,7 +173,7 @@ impl AgentService {
             !project_is_excluded(&conversation.path, &agent_config.exclude_projects)
                 && time.matches(conversation.timestamp)
         });
-        conversations.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        conversations.sort_by_key(|conversation| std::cmp::Reverse(conversation.timestamp));
         let scope = configured_scope(args, &agent_config);
         let current_project_dir_name = if scope == agent::search::AgentSearchScope::Local {
             std::env::current_dir()
@@ -253,19 +253,19 @@ impl AgentService {
                     },
                 )?;
                 apply_configured_render_policy(&mut output, &agent_config);
-                return Ok(agent::search::format_agent_output_with_warnings(
+                Ok(agent::search::format_agent_output_with_warnings(
                     &output,
                     &warnings.into_inner(),
-                ));
+                ))
             }
             SearchMode::Semantic => {
                 let (mut output, mut warnings) =
                     run_agent_semantic_search(self, &request, &conversations, &keys, &scoped)?;
                 apply_configured_render_policy(&mut output, &agent_config);
                 warnings.splice(0..0, base_warnings);
-                return Ok(agent::search::format_agent_output_with_warnings(
+                Ok(agent::search::format_agent_output_with_warnings(
                     &output, &warnings,
-                ));
+                ))
             }
             SearchMode::Hybrid => {
                 let lexical_request = agent::search::AgentSearchRequest {
@@ -305,10 +305,10 @@ impl AgentService {
                         );
                         attach_input_transcript_metadata(self, &mut output, &inputs);
                         apply_configured_render_policy(&mut output, &agent_config);
-                        return Ok(agent::search::format_agent_output_with_warnings(
+                        Ok(agent::search::format_agent_output_with_warnings(
                             &output,
                             &warnings.into_inner(),
-                        ));
+                        ))
                     }
                     Err(error) => {
                         warnings
@@ -334,10 +334,10 @@ impl AgentService {
                         let mut output = lexical;
                         output.mode = SearchMode::Hybrid;
                         apply_configured_render_policy(&mut output, &agent_config);
-                        return Ok(agent::search::format_agent_output_with_warnings(
+                        Ok(agent::search::format_agent_output_with_warnings(
                             &output,
                             &warnings.into_inner(),
-                        ));
+                        ))
                     }
                 }
             }

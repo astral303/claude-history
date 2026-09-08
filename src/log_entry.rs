@@ -181,7 +181,7 @@ pub enum Tool {
     /// A result the agent received without calling anything, which a client
     /// handed it under a tool's authority. It classifies a `ToolResult`, not a
     /// call, so it reaches no header.
-    ToolResultReceipt,
+    ResultReceipt,
     #[default]
     Other,
 }
@@ -229,7 +229,7 @@ impl Tool {
             Tool::TaskList => (100, "updated the task list", "time"),
             Tool::WebFetch => (110, "fetched", "URL"),
             Tool::WebSearch => (120, "searched", "web"),
-            Tool::ToolResultReceipt => (130, "received", "tool result"),
+            Tool::ResultReceipt => (130, "received", "tool result"),
             Tool::Other => (140, "called", "tool"),
         };
         ToolSummaryPhrase { order, verb, noun }

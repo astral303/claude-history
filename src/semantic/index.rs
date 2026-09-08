@@ -1146,7 +1146,7 @@ mod tests {
 
     #[test]
     fn warm_full_corpus_reuses_embeddings_across_scope_toggles() {
-        let conversations = vec![
+        let conversations = [
             conversation("/projects/project-a/session-a.jsonl", vec!["visible alpha"]),
             conversation("/projects/project-a/session-b.jsonl", vec!["visible beta"]),
         ];

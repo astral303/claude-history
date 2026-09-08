@@ -78,6 +78,10 @@
   and `thread_spawn_edges` tables.
 - Session files are read only when the database file is absent.
 
+### Internal: Checks
+
+- A Clippy warning now fails `just check`.
+
 ## v0.3.1 (2026-09-02)
 
 ### Fixes
