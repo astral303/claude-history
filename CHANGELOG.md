@@ -64,6 +64,9 @@
   text until the next launch.
 - Fix semantic and hybrid `agent search` not finding a session by text that
   appears only in one of its sub-agent transcripts.
+- Fix a Pi or OMP tool result row showing no timestamp with `i` on, and a run's
+  duration ending at its last call. A session ending in a tool result is now
+  dated from that result.
 
 ### Internal: Codex session discovery
 
