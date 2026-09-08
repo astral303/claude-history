@@ -180,6 +180,9 @@ A session that a filter has hidden from the list is still found by its ID
 Matches in a title, project name, or summary count more than matches in body
 text. Newer conversations are boosted in ranking.
 
+A search that takes longer than a moment shows a spinner and `searching` in
+place of the match count until its results arrive.
+
 ### Filter by time
 
 Use `--since` to set the start of a time range. Use `--before` to set its end.
