@@ -402,7 +402,7 @@ fn normalize_message(
                     standalone_tool_name: None,
                 }]),
             },
-            timestamp: None,
+            timestamp,
             uuid: None,
             cwd: None,
             parent_tool_use_id: None,
@@ -858,6 +858,28 @@ mod tests {
             .join(name)
     }
 
+    /// The blocks and timestamp of the first user entry whose blocks satisfy
+    /// `wanted`.
+    fn first_user_entry_with(
+        projection: &SessionProjection,
+        wanted: impl Fn(&[ContentBlock]) -> bool,
+    ) -> Option<(&[ContentBlock], Option<&str>)> {
+        projection
+            .entries
+            .iter()
+            .find_map(|(_, entry)| match entry {
+                LogEntry::User {
+                    message, timestamp, ..
+                } => match &message.content {
+                    UserContent::Blocks(blocks) if wanted(blocks) => {
+                        Some((blocks.as_slice(), timestamp.as_deref()))
+                    }
+                    _ => None,
+                },
+                _ => None,
+            })
+    }
+
     #[test]
     fn parses_versions_one_through_three_without_rewriting() {
         for (name, version, id) in [
@@ -912,28 +934,15 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        let (blocks, timestamp) = projection
-            .entries
-            .iter()
-            .find_map(|(_, entry)| match entry {
-                LogEntry::User {
-                    message, timestamp, ..
-                } => match &message.content {
-                    UserContent::Blocks(blocks)
-                        if blocks
-                            .iter()
-                            .any(|block| matches!(block, ContentBlock::ToolUse { .. })) =>
-                    {
-                        Some((blocks, timestamp))
-                    }
-                    _ => None,
-                },
-                _ => None,
-            })
-            .expect("the bash execution renders as a user entry holding a call");
+        let (blocks, timestamp) = first_user_entry_with(&projection, |blocks| {
+            blocks
+                .iter()
+                .any(|block| matches!(block, ContentBlock::ToolUse { .. }))
+        })
+        .expect("the bash execution renders as a user entry holding a call");
 
         assert_eq!(
-            timestamp.as_deref(),
+            timestamp,
             Some("2024-03-01T00:07:00.000Z"),
             "the entry opens a run, which is stamped from the record"
         );
@@ -950,7 +959,7 @@ mod tests {
                 content,
                 ..
             },
-        ] = blocks.as_slice()
+        ] = blocks
         else {
             panic!("expected a call and its result, got {blocks:?}");
         };
@@ -967,6 +976,25 @@ mod tests {
             !result.contains("$ false"),
             "the command is the call's input, not part of its result: {result:?}"
         );
+    }
+
+    /// Pi writes a `toolResult` record when the result arrives, so the
+    /// projected result carries that record's stamp and ends the run.
+    #[test]
+    fn a_tool_result_is_stamped_from_its_record() {
+        let projection = PI_LOG
+            .parse_transcript(&fixture("v3-branched.jsonl"))
+            .unwrap()
+            .unwrap();
+
+        let (_, timestamp) = first_user_entry_with(&projection, |blocks| {
+            blocks
+                .iter()
+                .all(|block| matches!(block, ContentBlock::ToolResult { .. }))
+        })
+        .expect("the tool result renders as a user entry holding only the result");
+
+        assert_eq!(timestamp, Some("2024-03-01T00:06:00.000Z"));
     }
 
     /// A cancelled command and a failed one each say so in the result, where
