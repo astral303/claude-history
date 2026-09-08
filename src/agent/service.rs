@@ -88,6 +88,28 @@ fn project_is_excluded(path: &Path, excluded: &[String]) -> bool {
         })
 }
 
+/// The variables an agent sets in the shells it runs, each naming the session
+/// the shell belongs to. Claude Code exports its transcript's file stem; Codex
+/// exports the thread id its rollout is named by.
+const CURRENT_SESSION_ID_ENV_VARS: [&str; 2] = ["CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID"];
+
+/// The sessions this command was launched from, one per variable set. An
+/// agent launched from another agent's shell inherits the outer variable, so
+/// there can be more than one.
+fn current_session_ids() -> Vec<String> {
+    CURRENT_SESSION_ID_ENV_VARS
+        .iter()
+        .filter_map(|name| std::env::var(name).ok())
+        .filter(|session_id| !session_id.is_empty())
+        .collect()
+}
+
+fn is_current_session(session_id: &str, current_session_ids: &[String]) -> bool {
+    current_session_ids
+        .iter()
+        .any(|current| search::session_id_matches(session_id, current))
+}
+
 #[derive(Default)]
 pub struct AgentService {
     transcripts: RefCell<
@@ -169,8 +191,18 @@ impl AgentService {
             mut conversations,
             ignored,
         } = history::load_history(false, None)?;
+        // The current session is already in the caller's context, so a hit in
+        // it spends the output budget on text the caller can read directly.
+        let excluded_sessions = if args.include_current_session
+            || agent_config.exclude_current_session == Some(false)
+        {
+            Vec::new()
+        } else {
+            current_session_ids()
+        };
         conversations.retain(|conversation| {
             !project_is_excluded(&conversation.path, &agent_config.exclude_projects)
+                && !is_current_session(&conversation.session_id, &excluded_sessions)
                 && time.matches(conversation.timestamp)
         });
         conversations.sort_by_key(|conversation| std::cmp::Reverse(conversation.timestamp));
@@ -211,7 +243,12 @@ impl AgentService {
         );
         let (mut keys, mut base_warnings) =
             discover_agent_keys(current_project_dir_name.as_deref())?;
-        keys.retain(|key| !project_is_excluded(&key.path, &agent_config.exclude_projects));
+        // Left out of the keys as well as the conversations: a key with no
+        // conversation is reported as a skipped transcript.
+        keys.retain(|key| {
+            !project_is_excluded(&key.path, &agent_config.exclude_projects)
+                && !is_current_session(&key.session_id, &excluded_sessions)
+        });
         if time.is_active() {
             // Key discovery walks the projects directory independently, so
             // without this every conversation outside the window would be

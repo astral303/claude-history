@@ -76,6 +76,9 @@
   dated from that result.
 - Fix `--delete <SESSION_ID>` refusing a Pi or OMP session as ambiguous when
   `PI_CODING_AGENT_SESSION_DIR` points both agents at one directory.
+- Fix `agent search` run from inside a Claude Code or Codex session returning
+  that session and counting its passages as not cached;
+  `--include-current-session` keeps it.
 
 ### Internal: Codex session discovery
 

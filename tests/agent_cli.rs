@@ -6,8 +6,12 @@ fn binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_rearview"))
 }
 
-fn run(config: &Path, args: &[&str]) -> Output {
-    Command::new(binary())
+/// The binary with every provider pointed at an empty root under `config`,
+/// and no current session: a test that launches it from inside an agent's
+/// session sets that agent's variable itself.
+fn rearview_in(config: &Path) -> Command {
+    let mut command = Command::new(binary());
+    command
         .env("CLAUDE_CONFIG_DIR", config)
         .env(
             "PI_CODING_AGENT_SESSION_DIR",
@@ -19,66 +23,44 @@ fn run(config: &Path, args: &[&str]) -> Output {
         .env("CODEX_HOME", config.join("empty-codex-home"))
         .env("KIMI_CODE_HOME", config.join("empty-kimi-home"))
         .env("OPENCODE_DB", config.join("empty-opencode.db"))
+        .env_remove("CLAUDE_CODE_SESSION_ID")
+        .env_remove("CODEX_THREAD_ID");
+    command
+}
+
+fn run(config: &Path, args: &[&str]) -> Output {
+    rearview_in(config)
         .args(args)
         .output()
         .expect("run rearview")
 }
 
 fn run_pi(config: &Path, sessions: &Path, args: &[&str]) -> Output {
-    Command::new(binary())
-        .env("CLAUDE_CONFIG_DIR", config)
+    rearview_in(config)
         .env("PI_CODING_AGENT_SESSION_DIR", sessions)
-        .env("REARVIEW_CACHE_DIR", config.join("cache"))
-        .env("CODEX_HOME", config.join("empty-codex-home"))
-        .env("KIMI_CODE_HOME", config.join("empty-kimi-home"))
-        .env("OPENCODE_DB", config.join("empty-opencode.db"))
         .args(args)
         .output()
         .expect("run rearview with Pi sessions")
 }
 
 fn run_codex(config: &Path, codex_home: &Path, args: &[&str]) -> Output {
-    Command::new(binary())
-        .env("CLAUDE_CONFIG_DIR", config)
-        .env(
-            "PI_CODING_AGENT_SESSION_DIR",
-            config.join("empty-agent-sessions"),
-        )
-        .env("REARVIEW_CACHE_DIR", config.join("cache"))
+    rearview_in(config)
         .env("CODEX_HOME", codex_home)
-        .env("KIMI_CODE_HOME", config.join("empty-kimi-home"))
-        .env("OPENCODE_DB", config.join("empty-opencode.db"))
         .args(args)
         .output()
         .expect("run rearview with Codex sessions")
 }
 
 fn run_kimi(config: &Path, kimi_home: &Path, args: &[&str]) -> Output {
-    Command::new(binary())
-        .env("CLAUDE_CONFIG_DIR", config)
-        .env(
-            "PI_CODING_AGENT_SESSION_DIR",
-            config.join("empty-agent-sessions"),
-        )
-        .env("REARVIEW_CACHE_DIR", config.join("cache"))
-        .env("CODEX_HOME", config.join("empty-codex-home"))
+    rearview_in(config)
         .env("KIMI_CODE_HOME", kimi_home)
-        .env("OPENCODE_DB", config.join("empty-opencode.db"))
         .args(args)
         .output()
         .expect("run rearview with Kimi sessions")
 }
 
 fn run_opencode(config: &Path, database: &Path, args: &[&str]) -> Output {
-    Command::new(binary())
-        .env("CLAUDE_CONFIG_DIR", config)
-        .env(
-            "PI_CODING_AGENT_SESSION_DIR",
-            config.join("empty-agent-sessions"),
-        )
-        .env("REARVIEW_CACHE_DIR", config.join("cache"))
-        .env("CODEX_HOME", config.join("empty-codex-home"))
-        .env("KIMI_CODE_HOME", config.join("empty-kimi-home"))
+    rearview_in(config)
         .env("OPENCODE_DB", database)
         .args(args)
         .output()
@@ -1042,6 +1024,78 @@ fn search_reports_partial_warnings_and_preserves_compact_success_output() {
         "protocol agent-warning kind=malformed-transcript ref=ch_",
     );
     assert_shows(&stdout, "read ref=ch_");
+}
+
+/// Claude Code sets `CLAUDE_CODE_SESSION_ID` in the shells it runs. A
+/// search launched from one of them leaves that session out, without
+/// reporting it as skipped, unless `--include-current-session` is passed.
+#[test]
+fn search_launched_from_a_claude_session_leaves_that_session_out() {
+    let config = tempfile::tempdir().expect("config");
+    let project = project(config.path());
+    let current = "12345678-1234-4234-9234-123456789abc";
+    let other = "87654321-1234-4234-9234-123456789abc";
+    write_transcript(
+        &project.join(format!("{current}.jsonl")),
+        "own session needle",
+    );
+    write_transcript(
+        &project.join(format!("{other}.jsonl")),
+        "own session needle",
+    );
+    let search = ["agent", "search", "--lexical", "own session needle"];
+
+    let from_inside = stdout_of(
+        &rearview_in(config.path())
+            .env("CLAUDE_CODE_SESSION_ID", current.to_ascii_uppercase())
+            .args(search)
+            .output()
+            .expect("run rearview from inside a Claude session"),
+    );
+    assert_hides(&from_inside, &format!("uuid={current}"));
+    assert_shows(&from_inside, &format!("uuid={other}"));
+    assert_hides(&from_inside, "kind=skipped");
+
+    let included = stdout_of(
+        &rearview_in(config.path())
+            .env("CLAUDE_CODE_SESSION_ID", current)
+            .args(search)
+            .arg("--include-current-session")
+            .output()
+            .expect("run rearview from inside a Claude session"),
+    );
+    assert_shows(&included, &format!("uuid={current}"));
+    assert_shows(&included, &format!("uuid={other}"));
+
+    let from_outside = stdout_of(&run(config.path(), &search));
+    assert_shows(&from_outside, &format!("uuid={current}"));
+    assert_shows(&from_outside, &format!("uuid={other}"));
+}
+
+/// Codex sets `CODEX_THREAD_ID` in the shells it runs, naming the rollout
+/// the shell belongs to.
+#[test]
+fn search_launched_from_a_codex_session_leaves_that_session_out() {
+    let config = tempfile::tempdir().expect("config");
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let day = codex_sessions_day(codex_home.path());
+    copy_codex_fixture(&day, "rollout.jsonl");
+
+    let search = ["agent", "search", "--lexical", "active codex question"];
+
+    let from_inside = stdout_of(
+        &rearview_in(config.path())
+            .env("CODEX_HOME", codex_home.path())
+            .env("CODEX_THREAD_ID", CODEX_THREAD)
+            .args(search)
+            .output()
+            .expect("run rearview from inside a Codex session"),
+    );
+    assert_hides(&from_inside, &format!("uuid={CODEX_THREAD}"));
+    assert_hides(&from_inside, "kind=skipped");
+
+    let from_outside = stdout_of(&run_codex(config.path(), codex_home.path(), &search));
+    assert_shows(&from_outside, &format!("uuid={CODEX_THREAD}"));
 }
 
 #[test]
