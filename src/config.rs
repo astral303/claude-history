@@ -51,6 +51,9 @@ pub struct AgentConfig {
     pub hits_per_conversation: Option<usize>,
     #[serde(default)]
     pub exclude_projects: Vec<String>,
+    /// `false` keeps the session `agent search` was launched from in its
+    /// results. Unset means `true`.
+    pub exclude_current_session: Option<bool>,
     pub tools: Option<bool>,
     pub tool_results: Option<bool>,
     pub thinking: Option<bool>,
@@ -244,6 +247,7 @@ top = 12
 within_top = 24
 hits_per_conversation = 3
 exclude_projects = ["agent-only"]
+exclude_current_session = false
 tools = true
 tool_results = true
 thinking = true
@@ -260,6 +264,7 @@ subagents = true
         assert_eq!(agent.within_top, Some(24));
         assert_eq!(agent.hits_per_conversation, Some(3));
         assert_eq!(agent.exclude_projects, vec!["agent-only"]);
+        assert_eq!(agent.exclude_current_session, Some(false));
         assert_eq!(agent.tools, Some(true));
         assert_eq!(agent.tool_results, Some(true));
         assert_eq!(agent.thinking, Some(true));

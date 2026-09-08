@@ -628,10 +628,11 @@ A key value can be `ctrl+<key>`, `alt+<key>`, one character, or `f1` through
 
 ### Search and project settings
 
-| Setting                | Default     | Effect                                                   |
-|------------------------|-------------|----------------------------------------------------------|
-| `search.mode`          | `"lexical"` | Start list search in `lexical` or `semantic` mode        |
-| `tui.exclude_projects` | `[]`        | Hide matching project names from browse and search lists |
+| Setting                          | Default     | Effect                                                              |
+|----------------------------------|-------------|---------------------------------------------------------------------|
+| `search.mode`                    | `"lexical"` | Start list search in `lexical` or `semantic` mode                   |
+| `tui.exclude_projects`           | `[]`        | Hide matching project names from browse and search lists            |
+| `agent.exclude_current_session`  | `true`      | Leave the session `agent search` was launched from out of its results |
 
 Project exclusions are case-sensitive and match the displayed name in the
 leftmost column. A parent such as `"repo"` also hides worktree rows such as
@@ -669,6 +670,11 @@ rearview agent search "cache invalidation" --since 1w
 stored in a form `rearview` does not read, and for an agent's session state
 database being busy or unreadable, after which no sessions from that agent are
 shown for that launch. The warning's detail names the agent and the reason.
+
+`agent search` run from a shell inside a Claude Code or Codex session leaves
+that session out of its results and out of the count of passages not cached.
+Pass `--include-current-session` to search it too. Sessions of other agents,
+and other sessions running at the same time, stay in.
 
 Use `--show-id` or `--show-path` when another command needs the selected
 session's identifier or file path.

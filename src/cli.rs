@@ -157,6 +157,9 @@ pub struct AgentSearchArgs {
     /// Search all workspaces
     #[arg(long, group = "agent_search_scope")]
     pub all: bool,
+    /// Include the session this command was launched from
+    #[arg(long)]
+    pub include_current_session: bool,
     #[command(flatten)]
     pub search_mode: AgentSearchModeArgs,
     #[command(flatten)]
