@@ -56,7 +56,11 @@ impl SessionProvider for PiProvider {
 
     /// A Pi session states its id in its header, not its file name, and two
     /// logs in one project may state the same id. Pi sessions resolve by id
-    /// only once listed.
+    /// only once listed, so no query is answered as an id.
+    fn is_session_id_shape(&self, _query: &str) -> bool {
+        false
+    }
+
     fn resolve_session_id(&self, _session_id: &str) -> Result<Option<ResolvedSession>> {
         Ok(None)
     }

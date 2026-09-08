@@ -114,10 +114,17 @@ impl SessionProvider for OpenCodeProvider {
         })
     }
 
-    /// A session is a row keyed by its id, archived or not. The `ses_` prefix
-    /// keeps an ordinary query from opening the database.
+    /// The shape of an id OpenCode created, so a query of another shape does
+    /// not open the database. A client may hand OpenCode an id of its own
+    /// through the API; this check rejects it, and a database OpenCode wrote
+    /// itself holds none.
+    fn is_session_id_shape(&self, query: &str) -> bool {
+        is_opencode_session_id(query)
+    }
+
+    /// A session is a row keyed by its id, archived or not.
     fn resolve_session_id(&self, session_id: &str) -> Result<Option<ResolvedSession>> {
-        if !session_id.starts_with("ses_") {
+        if !self.is_session_id_shape(session_id) {
             return Ok(None);
         }
         for root in OpenCodeStorage.roots()? {
@@ -127,6 +134,30 @@ impl SessionProvider for OpenCodeProvider {
         }
         Ok(None)
     }
+}
+
+/// Hex digits of the creation timestamp after the `ses_` prefix, then base-62
+/// characters of randomness, as `packages/opencode/src/id/id.ts` writes an id
+/// at OpenCode v1.18.26.
+const SESSION_ID_TIMESTAMP_HEX_DIGITS: usize = 12;
+const SESSION_ID_RANDOM_CHARACTERS: usize = 14;
+
+/// True when `query` is an id OpenCode created: the prefix, the timestamp as
+/// lowercase hex, then the random part.
+fn is_opencode_session_id(query: &str) -> bool {
+    let Some(rest) = query.strip_prefix(opencode::SESSION_ID_PREFIX) else {
+        return false;
+    };
+    let Some((timestamp, random)) = rest.split_at_checked(SESSION_ID_TIMESTAMP_HEX_DIGITS) else {
+        return false;
+    };
+    timestamp
+        .chars()
+        .all(|character| character.is_ascii_digit() || ('a'..='f').contains(&character))
+        && random.len() == SESSION_ID_RANDOM_CHARACTERS
+        && random
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric())
 }
 
 /// The stub for `session_id` in `database`, when a row holds it: a sub-agent
@@ -960,6 +991,40 @@ mod tests {
             OpenCodeProvider.resolve_session_id("deployment").unwrap(),
             None
         );
+    }
+
+    /// An id as OpenCode writes one: the prefix, twelve lowercase hex digits
+    /// of timestamp, fourteen base-62 characters of randomness.
+    const CREATED_SESSION_ID: &str = "ses_019b3a2f6c1eVn8tQxL0mZ4kRp";
+
+    #[test]
+    fn only_an_id_opencode_created_has_the_session_id_shape() {
+        assert!(OpenCodeProvider.is_session_id_shape(CREATED_SESSION_ID));
+
+        let rejected = [
+            ("ses_live", "a prefix and a word"),
+            ("ses_019b3a2f6c1eVn8tQxL0mZ4kR", "one character short"),
+            ("ses_019b3a2f6c1eVn8tQxL0mZ4kRpX", "one character long"),
+            (
+                "ses_019B3A2F6C1EVn8tQxL0mZ4kRp",
+                "uppercase hex in the timestamp",
+            ),
+            (
+                "ses_019b3a2f6c1eVn8tQxL0m_4kRp",
+                "an underscore in the random part",
+            ),
+            (
+                "ses_019b3a2f6c1eVn8tQxL0m-4kRp",
+                "a dash in the random part",
+            ),
+            ("019b3a2f6c1eVn8tQxL0mZ4kRp", "no prefix"),
+        ];
+        for (query, why) in rejected {
+            assert!(
+                !OpenCodeProvider.is_session_id_shape(query),
+                "{query:?} accepted: {why}"
+            );
+        }
     }
 
     /// The reason of the failure to list `database`.

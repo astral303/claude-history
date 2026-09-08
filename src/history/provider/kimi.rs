@@ -85,11 +85,15 @@ impl SessionProvider for KimiProvider {
         Ok(Deleted::just_the_session())
     }
 
+    fn is_session_id_shape(&self, query: &str) -> bool {
+        is_session_directory_name(query)
+    }
+
     /// A Kimi session id names the directory holding its wires. A sub-agent
     /// thread is named `<session>#<agent>` and is read through its parent, so
     /// it resolves to no wire of its own.
     fn resolve_session_id(&self, session_id: &str) -> Result<Option<ResolvedSession>> {
-        if !is_session_directory_name(session_id) {
+        if !self.is_session_id_shape(session_id) {
             return Ok(None);
         }
         for root in KimiStorage.roots()? {
