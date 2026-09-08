@@ -285,6 +285,26 @@ pub(crate) fn block_texts(content: Option<&Value>) -> Vec<String> {
         .collect()
 }
 
+/// `text` without the lines at either end that hold only whitespace. The lines
+/// that remain keep their indentation, which a character-wise `trim` would take
+/// off the first one. A `\r` closing the last remaining line is dropped with
+/// its terminator; interior `\r` stay.
+pub(crate) fn trim_blank_lines(text: &str) -> &str {
+    let mut offset = 0;
+    let mut content: Option<(usize, usize)> = None;
+    for line in text.split_inclusive('\n') {
+        let line_end = offset + line.len();
+        let body = line.strip_suffix('\n').unwrap_or(line);
+        let body = body.strip_suffix('\r').unwrap_or(body);
+        if !body.trim().is_empty() {
+            let start = content.map_or(offset, |(start, _)| start);
+            content = Some((start, offset + body.len()));
+        }
+        offset = line_end;
+    }
+    content.map_or("", |(start, end)| &text[start..end])
+}
+
 /// Append `note` below what a command printed, on a line of its own. An empty
 /// output leaves the note on the first line rather than under a blank one.
 pub(crate) fn append_output_note(output: &mut String, note: &str) {
@@ -475,5 +495,21 @@ mod tests {
             error.to_string().contains("unreadable.jsonl"),
             "a refusal must name the file it refused: {error}"
         );
+    }
+
+    #[test]
+    fn trim_blank_lines_drops_the_blank_lines_at_each_end_and_keeps_indentation() {
+        let cases = [
+            ("\n    Directory: C:\\x\n", "    Directory: C:\\x"),
+            ("   \n\nout\n  \n", "out"),
+            ("  indented\n  more", "  indented\n  more"),
+            ("\n\n", ""),
+            ("first\n   \nlast", "first\n   \nlast"),
+            ("a\r\nb\r\n", "a\r\nb"),
+            ("a\r\nb\r", "a\r\nb"),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(trim_blank_lines(input), expected, "input {input:?}");
+        }
     }
 }

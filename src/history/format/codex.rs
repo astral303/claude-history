@@ -9,7 +9,10 @@
 
 mod tools;
 
-use super::{SessionFormat, SessionHeader, SessionProjection, append_exit_code, block_texts};
+use super::{
+    SessionFormat, SessionHeader, SessionProjection, append_exit_code, block_texts,
+    trim_blank_lines,
+};
 use crate::agent::sanitize::sanitize_agent_text;
 use crate::agent::transcript::bounded_tool_result_text;
 use crate::error::Result;
@@ -428,7 +431,7 @@ impl<'a> UserShellCommand<'a> {
     /// below it when the command failed, and the shell's terminal styling and
     /// `\r\n` endings stripped.
     fn result_text(&self) -> String {
-        let mut text = sanitize_agent_text(self.output).trim_end().to_owned();
+        let mut text = trim_blank_lines(&sanitize_agent_text(self.output)).to_owned();
         if self.exit_code != 0 {
             append_exit_code(&mut text, self.exit_code);
         }
