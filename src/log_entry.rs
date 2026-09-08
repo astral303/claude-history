@@ -116,6 +116,19 @@ impl LogEntry {
             _ => None,
         }
     }
+
+    /// The timestamp of a user or assistant entry: the ones that date a
+    /// session and extend its duration. A metadata record (`Model`, `Usage`,
+    /// `Compaction`) is not activity, so a session holding nothing but model
+    /// changes is neither dated by them nor given a duration from them.
+    pub fn activity_timestamp(&self) -> Option<&str> {
+        match self {
+            LogEntry::User { timestamp, .. } | LogEntry::Assistant { timestamp, .. } => {
+                timestamp.as_deref()
+            }
+            _ => None,
+        }
+    }
 }
 
 fn default_true() -> bool {
@@ -410,6 +423,19 @@ pub fn parse_agent_progress(data: &serde_json::Value) -> Option<AgentProgressDat
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_metadata_record_carries_a_timestamp_but_is_not_activity() {
+        let metadata = LogEntry::PiMetadata {
+            label: "Model".into(),
+            text: "gpt".into(),
+            timestamp: Some("2024-03-01T00:06:00.000Z".into()),
+            searchable: false,
+            usage: None,
+        };
+        assert_eq!(metadata.timestamp(), Some("2024-03-01T00:06:00.000Z"));
+        assert_eq!(metadata.activity_timestamp(), None);
+    }
 
     #[test]
     fn extract_text_from_blocks_only_text() {
