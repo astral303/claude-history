@@ -1,19 +1,14 @@
 use clap::ValueEnum;
 use serde::Deserialize;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum SearchMode {
+    #[default]
     Lexical,
     Semantic,
     Exact,
     Hybrid,
-}
-
-impl Default for SearchMode {
-    fn default() -> Self {
-        Self::Lexical
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

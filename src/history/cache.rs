@@ -54,7 +54,11 @@ struct SessionCacheFile {
 /// a session id and a project path are read out of a conversation, and an empty
 /// parse yields none. They are absent from `Empty` rather than blank, so no
 /// reader can build a row or an agent key out of placeholder identity.
+///
+/// `Listed` is the common case, so boxing it would cost one allocation per
+/// listed session to save bytes on the rare `Empty` entry.
 #[derive(Serialize, Deserialize, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum SessionCacheEntry {
     Listed(ListedSessionEntry),
     Empty(CachedFingerprint),
@@ -92,7 +96,11 @@ struct ProjectCache {
 /// provider entry stores from the transcript's own path and cwd, and names
 /// the sub-agent transcripts from the session directory on every load, so a
 /// listed entry here is its fingerprint and its content.
+///
+/// `Listed` is the common case, so boxing it would cost one allocation per
+/// listed session to save bytes on the rare `Empty` entry.
 #[derive(Serialize, Deserialize, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum ProjectCacheEntry {
     Listed {
         /// Spans the session and its sub-agent transcripts since schema 14;

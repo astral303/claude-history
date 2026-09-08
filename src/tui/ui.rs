@@ -3345,7 +3345,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
-            .draw(|frame| render_list(frame, &app, frame.area()))
+            .draw(|frame| render_list(frame, app, frame.area()))
             .unwrap();
 
         terminal_contents(&terminal)

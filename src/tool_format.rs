@@ -119,9 +119,9 @@ pub fn format_tool_call(
         Tool::AgentMessage => format_agent_message(name, input),
         Tool::WebFetch => format_web_fetch(name, input),
         Tool::WebSearch => format_web_search(name, input),
-        // `ToolResultReceipt` reaches no header; the fallback keeps the match
+        // `ResultReceipt` reaches no header; the fallback keeps the match
         // exhaustive.
-        Tool::Wait | Tool::TaskList | Tool::ToolResultReceipt | Tool::Other => {
+        Tool::Wait | Tool::TaskList | Tool::ResultReceipt | Tool::Other => {
             format_fallback(name, input)
         }
     }
@@ -149,7 +149,7 @@ fn header_field(tool: Tool) -> Option<&'static str> {
         Tool::AgentMessage => Some("recipient"),
         Tool::WebFetch => Some("url"),
         Tool::WebSearch => Some("query"),
-        Tool::Wait | Tool::TaskList | Tool::ToolResultReceipt | Tool::Other => None,
+        Tool::Wait | Tool::TaskList | Tool::ResultReceipt | Tool::Other => None,
     }
 }
 

@@ -632,9 +632,11 @@ fn omitted_message_ranges(messages: &[RenderedMessage<'_>], selected: &[usize]) 
                 let last = index - 1;
                 let first_message = &messages[first];
                 let last_message = &messages[last];
-                let prefix = qualify
-                    .then(|| format!("{}:", first_message.conversation.reference.canonical()))
-                    .unwrap_or_default();
+                let prefix = if qualify {
+                    format!("{}:", first_message.conversation.reference.canonical())
+                } else {
+                    Default::default()
+                };
                 if first_message.conversation.reference.full_ref()
                     == last_message.conversation.reference.full_ref()
                 {

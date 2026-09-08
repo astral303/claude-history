@@ -427,7 +427,7 @@ impl App {
     pub fn finish_loading(&mut self) {
         // Sort all conversations by timestamp (newest first)
         self.conversations
-            .sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+            .sort_by_key(|conversation| std::cmp::Reverse(conversation.timestamp));
 
         // Reindex after sorting
         for (idx, conv) in self.conversations.iter_mut().enumerate() {

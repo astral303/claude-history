@@ -698,8 +698,7 @@ through [checkle](https://github.com/raine/checkle). It does not rewrite files.
 Full logs are stored in `target/check-logs`.
 
 Run one check with `just format-check`, `just clippy`, `just test`, or
-`just build`. Clippy warnings do not fail the check; read
-`target/check-logs/clippy.log` to see them.
+`just build`. A Clippy warning fails the check.
 
 Run `just install-hooks` to install a pre-commit hook that formats staged Rust
 files and runs the same checks.
