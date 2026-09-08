@@ -47,7 +47,8 @@ pub(crate) fn header_session_id(path: &Path) -> Option<String> {
 }
 
 /// Every Pi-family log `depth` levels under `root` whose header states
-/// `session_id`.
+/// `session_id`. A UUID matches in any case; an id the user chose matches as
+/// typed.
 ///
 /// An id is not unique across logs — a branch copied within a project keeps
 /// the id it came from — so this returns all of them rather than the first.
@@ -59,7 +60,10 @@ pub(crate) fn sessions_with_id(
     Ok(
         crate::history::provider::walk::jsonl_files_at_depth(root, depth)?
             .into_iter()
-            .filter(|path| header_session_id(path).as_deref() == Some(session_id))
+            .filter(|path| {
+                header_session_id(path)
+                    .is_some_and(|stored| crate::search::session_id_matches(&stored, session_id))
+            })
             .collect(),
     )
 }
@@ -842,6 +846,32 @@ mod tests {
         assert_eq!(found, vec![copy, first]);
         assert!(
             sessions_with_id(directory.path(), 1, "no_such_id")
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    /// Pi generates a UUID unless the user chose an id, so a UUID is found in
+    /// any case while a chosen id is found as typed.
+    #[test]
+    fn a_uuid_in_the_header_is_found_in_any_case_and_a_chosen_id_as_typed() {
+        let directory = tempfile::tempdir().unwrap();
+        let project = directory.path().join("project");
+        std::fs::create_dir_all(&project).unwrap();
+        let generated = project.join("generated.jsonl");
+        std::fs::write(
+            &generated,
+            "{\"type\":\"session\",\"version\":3,\"id\":\"01a05936-420b-7f5a-bb7a-1cb44cb94841\",\"timestamp\":\"2026-08-31T19:05:23.211Z\",\"cwd\":\"/tmp\"}\n",
+        )
+        .unwrap();
+        std::fs::copy(fixture("v1.jsonl"), project.join("chosen.jsonl")).unwrap();
+
+        assert_eq!(
+            sessions_with_id(directory.path(), 1, "01A05936-420B-7F5A-BB7A-1CB44CB94841").unwrap(),
+            vec![generated]
+        );
+        assert!(
+            sessions_with_id(directory.path(), 1, "CUSTOM_V1_ID")
                 .unwrap()
                 .is_empty()
         );

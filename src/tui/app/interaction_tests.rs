@@ -1308,6 +1308,20 @@ fn a_pasted_session_id_selects_the_conversation_that_states_it() {
     assert_eq!(app.unresolved_session_id(), None);
 }
 
+/// The row keeps the id as Codex wrote it; only the query is in uppercase.
+#[test]
+fn a_session_id_pasted_in_uppercase_selects_its_conversation() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = app_with_codex_conversation(&dir);
+
+    app.set_query_for_test(&CODEX_SESSION_ID.to_ascii_uppercase());
+    app.update_filter();
+
+    assert_eq!(app.filtered(), [0]);
+    assert_eq!(app.unresolved_session_id(), None);
+    assert_eq!(app.conversations[0].session_id, CODEX_SESSION_ID);
+}
+
 #[test]
 fn a_session_id_no_agent_stores_empties_the_list_and_names_the_id() {
     const ABSENT: &str = "019f0000-0000-7000-8000-0000000000ff";

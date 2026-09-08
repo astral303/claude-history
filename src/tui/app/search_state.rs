@@ -634,7 +634,7 @@ impl App {
         if let Some(index) = self
             .conversations
             .iter()
-            .position(|conversation| conversation.session_id == query)
+            .position(|conversation| search::session_id_matches(&conversation.session_id, query))
         {
             return SessionLookup::Listed(index);
         }

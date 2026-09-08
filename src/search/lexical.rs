@@ -7,6 +7,7 @@ use crate::search::query::ParsedQuery;
 pub use crate::text_match::normalize_for_search;
 use chrono::{DateTime, Duration, Local};
 use rayon::prelude::*;
+use std::borrow::Cow;
 
 /// Precomputed search data for a conversation
 #[derive(Clone)]
@@ -38,6 +39,28 @@ pub fn is_uuid(query: &str) -> bool {
         .iter()
         .zip(expected_lens.iter())
         .all(|(part, &len)| part.len() == len && part.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+/// True when `query` names the session stored as `stored`. Hex UUIDs match
+/// whatever case each is written in; every other shape must match exactly,
+/// because OpenCode builds ids from a base62 alphabet where `a` and `A` are
+/// two ids.
+pub fn session_id_matches(stored: &str, query: &str) -> bool {
+    if is_uuid(stored) && is_uuid(query) {
+        stored.eq_ignore_ascii_case(query)
+    } else {
+        stored == query
+    }
+}
+
+/// The form to probe a file name, directory or index with: a UUID lowercased,
+/// every other id as typed.
+pub fn session_id_for_lookup(query: &str) -> Cow<'_, str> {
+    if is_uuid(query) {
+        Cow::Owned(query.to_ascii_lowercase())
+    } else {
+        Cow::Borrowed(query)
+    }
 }
 
 /// Build searchable index from conversations using pre-normalized search text.
@@ -914,6 +937,46 @@ mod tests {
     #[test]
     fn is_uuid_with_whitespace() {
         assert!(is_uuid("  e7d318b1-4274-4ee2-a341-e94893b5df49  "));
+    }
+
+    #[test]
+    fn a_uuid_matches_its_session_whatever_case_it_is_typed_in() {
+        assert!(session_id_matches(
+            "e7d318b1-4274-4ee2-a341-e94893b5df49",
+            "E7D318B1-4274-4EE2-A341-E94893B5DF49"
+        ));
+        assert!(!session_id_matches(
+            "e7d318b1-4274-4ee2-a341-e94893b5df49",
+            "e7d318b1-4274-4ee2-a341-e94893b5df48"
+        ));
+    }
+
+    /// OpenCode ids are base62, so a flipped letter is another id; a Pi id
+    /// the user chose is whatever they typed.
+    #[test]
+    fn an_id_that_is_not_a_uuid_matches_only_itself() {
+        assert!(session_id_matches(
+            "ses_fdf25a01fffe5Xd4qwaJHrqnZy",
+            "ses_fdf25a01fffe5Xd4qwaJHrqnZy"
+        ));
+        assert!(!session_id_matches(
+            "ses_fdf25a01fffe5Xd4qwaJHrqnZy",
+            "ses_fdf25a01fffe5xd4qwajhrqnzy"
+        ));
+        assert!(session_id_matches("custom_v1_id", "custom_v1_id"));
+        assert!(!session_id_matches("custom_v1_id", "CUSTOM_V1_ID"));
+    }
+
+    #[test]
+    fn a_uuid_is_looked_up_lowercased_and_any_other_id_as_typed() {
+        assert_eq!(
+            session_id_for_lookup("E7D318B1-4274-4EE2-A341-E94893B5DF49"),
+            "e7d318b1-4274-4ee2-a341-e94893b5df49"
+        );
+        assert_eq!(
+            session_id_for_lookup("ses_fdf25a01fffe5Xd4qwaJHrqnZy"),
+            "ses_fdf25a01fffe5Xd4qwaJHrqnZy"
+        );
     }
 
     #[test]

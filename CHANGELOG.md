@@ -19,6 +19,9 @@
 
 - Fix an unknown OpenCode or Kimi session ID running as a text search; the
   list now shows "not found", as it does for a UUID.
+- Fix a session ID pasted in uppercase reported as not found even though the
+  session existed. A UUID now matches in any case; an OpenCode ID matches as
+  OpenCode wrote it.
 - Fix a Claude session reopened without a new message jumping to the top of
   the list and into the `--since` window; it is now dated by its last message.
 - Fix `→`, `←` and `Enter` not expanding or collapsing truncated messages in
@@ -77,10 +80,6 @@
 - Sessions and their sub-agents are now listed from the database's `threads`
   and `thread_spawn_edges` tables.
 - Session files are read only when the database file is absent.
-
-### Internal: Checks
-
-- A Clippy warning now fails `just check`.
 
 ## v0.3.1 (2026-09-02)
 
