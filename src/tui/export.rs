@@ -916,6 +916,126 @@ mod tests {
         show_thinking: false,
     };
 
+    const WITH_THINKING: ExportOptions = ExportOptions {
+        show_tools: false,
+        show_thinking: true,
+    };
+
+    const WITH_TOOLS_AND_THINKING: ExportOptions = ExportOptions {
+        show_tools: true,
+        show_thinking: true,
+    };
+
+    /// The formats that render rows; JSONL copies the file as is.
+    const RENDERED_FORMATS: [ExportFormat; 3] = [
+        ExportFormat::Ledger,
+        ExportFormat::Plain,
+        ExportFormat::Markdown,
+    ];
+
+    const ASSISTANT_TEXT: &str = "listing the directory";
+    const TOOL_NAME: &str = "Bash";
+    const ASSISTANT_TOOL_CALL: &str = "Bash: ls";
+    const THINKING_BLOCK: &str = "plan the listing";
+
+    /// One Claude assistant entry holding a thinking block, a text block and a
+    /// `Bash` call, written under `dir` so parallel test runs do not share it.
+    fn claude_assistant_fixture(dir: &tempfile::TempDir) -> std::path::PathBuf {
+        let path = dir.path().join("assistant.jsonl");
+        let entry = serde_json::json!({
+            "type": "assistant",
+            "timestamp": "2024-01-01T00:00:01Z",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": THINKING_BLOCK, "signature": ""},
+                    {"type": "text", "text": ASSISTANT_TEXT},
+                    {"type": "tool_use", "id": "toolu_01", "name": TOOL_NAME, "input": {"command": "ls"}}
+                ]
+            }
+        })
+        .to_string();
+        std::fs::write(&path, format!("{entry}\n")).unwrap();
+        path
+    }
+
+    fn export_claude_fixture(path: &Path, format: ExportFormat, options: ExportOptions) -> String {
+        generate_content(crate::history::Source::Claude, path, &[], format, options)
+            .unwrap_or_else(|error| panic!("{format:?} export fails: {error}"))
+    }
+
+    #[test]
+    fn exports_print_an_assistant_tool_call_under_the_tool_label() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = claude_assistant_fixture(&dir);
+
+        for (format, expected) in [
+            (
+                ExportFormat::Ledger,
+                format!("Tool │ {ASSISTANT_TOOL_CALL}"),
+            ),
+            (ExportFormat::Plain, format!("Tool: {ASSISTANT_TOOL_CALL}")),
+            (
+                ExportFormat::Markdown,
+                format!("### Tool: {TOOL_NAME}\n\n```\n{ASSISTANT_TOOL_CALL}\n```"),
+            ),
+        ] {
+            let exported = export_claude_fixture(&path, format, WITH_TOOLS);
+            assert!(exported.contains(&expected), "{format:?}:\n{exported}");
+        }
+    }
+
+    #[test]
+    fn exports_print_a_thinking_block_under_the_thinking_label() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = claude_assistant_fixture(&dir);
+
+        for (format, expected) in [
+            (ExportFormat::Ledger, format!("Thinking │ {THINKING_BLOCK}")),
+            (ExportFormat::Plain, format!("Thinking: {THINKING_BLOCK}")),
+            (
+                ExportFormat::Markdown,
+                format!("### Thinking\n\n{THINKING_BLOCK}"),
+            ),
+        ] {
+            let exported = export_claude_fixture(&path, format, WITH_THINKING);
+            assert!(exported.contains(&expected), "{format:?}:\n{exported}");
+        }
+    }
+
+    #[test]
+    fn exports_omit_assistant_tool_calls_and_thinking_blocks_by_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = claude_assistant_fixture(&dir);
+
+        for format in RENDERED_FORMATS {
+            let exported = export_claude_fixture(&path, format, ExportOptions::default());
+            assert!(exported.contains(ASSISTANT_TEXT), "{format:?}:\n{exported}");
+            assert!(
+                !exported.contains(ASSISTANT_TOOL_CALL),
+                "{format:?}:\n{exported}"
+            );
+            assert!(
+                !exported.contains(THINKING_BLOCK),
+                "{format:?}:\n{exported}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_clipboard_carries_an_assistant_tool_call_and_thinking_block() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = claude_assistant_fixture(&dir);
+        let entries =
+            export_entries(crate::history::Source::Claude, &path, &[]).expect("the fixture parses");
+        let (_, assistant_entry) = entries.first().expect("the fixture holds one entry");
+
+        let copied = format_entry_for_clipboard(assistant_entry, WITH_TOOLS_AND_THINKING);
+
+        assert!(copied.contains(ASSISTANT_TOOL_CALL), "{copied}");
+        assert!(copied.contains(THINKING_BLOCK), "{copied}");
+    }
+
     /// The line `needle` sits on, whatever the shape indents or pads around it.
     fn line_with<'a>(text: &'a str, needle: &str) -> &'a str {
         text.lines()
