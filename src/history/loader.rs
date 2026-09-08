@@ -546,12 +546,15 @@ fn find_all_jsonl_by_uuid(uuid: &str) -> Result<Vec<PathBuf>> {
     find_all_jsonl_under(&super::get_claude_projects_root()?, uuid)
 }
 
+/// Claude names the file with the UUID in lowercase, so the probe is
+/// lowercased: a file system that matches names by their bytes would miss
+/// the file otherwise.
 fn find_all_jsonl_under(root: &Path, uuid: &str) -> Result<Vec<PathBuf>> {
     if !root.exists() {
         return Ok(Vec::new());
     }
 
-    let filename = format!("{}.jsonl", uuid);
+    let filename = format!("{}.jsonl", crate::search::session_id_for_lookup(uuid));
     let mut matches = Vec::new();
 
     for entry in read_dir(root)? {
@@ -597,11 +600,9 @@ fn delete_session_under(root: &Path, uuid: &str) -> Result<Deleted> {
         );
         std::fs::remove_file(jsonl_path)?;
 
-        if let Some(project_dir) = jsonl_path.parent() {
-            let session_dir = project_dir.join(uuid);
-            if session_dir.is_dir() {
-                std::fs::remove_dir_all(&session_dir)?;
-            }
+        let session_dir = jsonl_path.with_extension("");
+        if session_dir.is_dir() {
+            std::fs::remove_dir_all(&session_dir)?;
         }
     }
 
@@ -1286,6 +1287,29 @@ mod tests {
                 subagent_sessions: 0,
             }
         );
+        assert!(!transcript.exists());
+        assert!(!session_dir.exists());
+    }
+
+    /// Claude writes the file name in lowercase. On a file system that
+    /// matches names by their bytes, an uppercase paste would find nothing.
+    #[test]
+    fn an_uppercase_session_id_finds_and_deletes_the_lowercase_transcript() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join(FIXTURE_PROJECT);
+        claude::copy_dir_recursive(&fixture_project(), &project).unwrap();
+        let transcript = project.join(format!("{FIXTURE_SESSION}.jsonl"));
+        let session_dir = project.join(FIXTURE_SESSION);
+        let uppercase = FIXTURE_SESSION.to_ascii_uppercase();
+
+        assert_eq!(
+            find_all_jsonl_under(root.path(), &uppercase).unwrap(),
+            vec![transcript.clone()]
+        );
+
+        let deleted = delete_session_under(root.path(), &uppercase).unwrap();
+
+        assert_eq!(deleted.stored_copies, 1);
         assert!(!transcript.exists());
         assert!(!session_dir.exists());
     }

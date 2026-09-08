@@ -913,6 +913,19 @@ mod tests {
         );
     }
 
+    /// OpenCode draws ids from a base62 alphabet, so `ses_Live` is another
+    /// id, not this one in another case.
+    #[test]
+    fn a_session_id_differing_only_in_case_resolves_to_nothing() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = database_in(directory.path());
+        let connection = Connection::open(&database).unwrap();
+        fixture::standard_session(&connection, "ses_live");
+        drop(connection);
+
+        assert!(stored_session_in(&database, "ses_Live").unwrap().is_none());
+    }
+
     /// One stub per session, its sub-agent rows named on it, nested ones
     /// flattened, and the fingerprint spanning all of them.
     #[test]

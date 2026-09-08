@@ -13,9 +13,13 @@ use crate::error::{AppError, Result};
 use crate::history::format::{self, SessionFormat, kimi};
 use crate::history::{Conversation, Source, parser};
 use serde_json::{Value, json};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+
+/// Kimi names each session directory `session_<uuid>`.
+const SESSION_DIRECTORY_PREFIX: &str = "session_";
 
 pub struct KimiProvider;
 
@@ -112,8 +116,9 @@ fn session_stub_of(root: &SessionRoot, session_id: &str) -> Result<Option<Sessio
     if !root.path.is_dir() {
         return Ok(None);
     }
+    let directory_name = session_directory_name_for_lookup(session_id);
     for workspace in walk::subdirectories(&root.path)? {
-        let session_dir = workspace.join(session_id);
+        let session_dir = workspace.join(&*directory_name);
         if !session_dir.is_dir() {
             continue;
         }
@@ -124,10 +129,34 @@ fn session_stub_of(root: &SessionRoot, session_id: &str) -> Result<Option<Sessio
     Ok(None)
 }
 
+/// The directory to probe for `session_id`. Kimi names it `session_<uuid>`
+/// with the UUID in lowercase, so that part is lowercased; the prefix and a
+/// sub-agent's `#<agent>` suffix stay as typed.
+fn session_directory_name_for_lookup(session_id: &str) -> Cow<'_, str> {
+    let Some(after_prefix) = session_id.strip_prefix(SESSION_DIRECTORY_PREFIX) else {
+        return Cow::Borrowed(session_id);
+    };
+    let (uuid, suffix) = after_prefix
+        .split_once('#')
+        .map_or((after_prefix, None), |(uuid, agent)| (uuid, Some(agent)));
+    if !crate::search::is_uuid(uuid) {
+        return Cow::Borrowed(session_id);
+    }
+    let mut name = format!(
+        "{SESSION_DIRECTORY_PREFIX}{}",
+        crate::search::session_id_for_lookup(uuid)
+    );
+    if let Some(agent) = suffix {
+        name.push('#');
+        name.push_str(agent);
+    }
+    Cow::Owned(name)
+}
+
 /// A name Kimi could have given a session directory: its own prefix, and one
 /// plain component, so a joined id cannot reach out of the workspace.
 fn is_session_directory_name(session_id: &str) -> bool {
-    session_id.starts_with("session_")
+    session_id.starts_with(SESSION_DIRECTORY_PREFIX)
         && Path::new(session_id).components().count() == 1
         && Path::new(session_id)
             .components()
@@ -141,7 +170,9 @@ fn is_session_directory_name(session_id: &str) -> bool {
 fn owned_session_dir(path: &Path) -> Option<PathBuf> {
     let location = kimi::wire_location(path);
     let name = location.session_dir.file_name()?.to_str()?;
-    if !name.starts_with("session_") || !location.session_dir.join("state.json").is_file() {
+    if !name.starts_with(SESSION_DIRECTORY_PREFIX)
+        || !location.session_dir.join("state.json").is_file()
+    {
         return None;
     }
     Some(location.session_dir)
@@ -396,7 +427,7 @@ fn session_id_of(path: &Path) -> Result<String> {
         .session_dir
         .file_name()
         .and_then(OsStr::to_str)
-        .filter(|name| name.starts_with("session_"))
+        .filter(|name| name.starts_with(SESSION_DIRECTORY_PREFIX))
         .map(str::to_owned)
         .ok_or_else(|| {
             AppError::ConfigError(format!(
@@ -695,6 +726,36 @@ mod tests {
 
         assert_eq!(stub.locator, wire);
         assert_eq!(stub.subagents, vec![subagent]);
+    }
+
+    /// Kimi writes the UUID in the directory name in lowercase; a paste in
+    /// uppercase names the same directory.
+    #[test]
+    fn an_uppercase_session_id_resolves_to_the_same_directory() {
+        let home = tempfile::tempdir().unwrap();
+        let wire = write_session(home.path(), SESSION, "kimi title", false);
+        let root = SessionRoot::new(home.path().join("sessions"));
+        let uppercase = "session_0F000000-0000-4000-8000-000000000001";
+
+        let stub = session_stub_of(&root, uppercase).unwrap().unwrap();
+
+        assert_eq!(stub.locator, wire);
+    }
+
+    /// The prefix and a sub-agent's `#<agent>` suffix are not part of the
+    /// UUID, so they are probed as typed.
+    #[test]
+    fn the_lookup_name_lowercases_the_uuid_alone() {
+        assert_eq!(
+            session_directory_name_for_lookup(
+                "session_0F000000-0000-4000-8000-000000000001#agent-0"
+            ),
+            "session_0f000000-0000-4000-8000-000000000001#agent-0"
+        );
+        assert_eq!(
+            session_directory_name_for_lookup("session_Custom-Name"),
+            "session_Custom-Name"
+        );
     }
 
     #[test]

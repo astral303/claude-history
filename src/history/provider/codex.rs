@@ -306,9 +306,10 @@ impl CodexThreadIndex {
 
     /// The stub `thread_id` would list under, or `None` for a thread the
     /// index does not list. A sub-agent thread answers with a stub of its
-    /// own carrying the threads beneath it.
+    /// own carrying the threads beneath it. Codex writes the id in lowercase,
+    /// so the index is probed with the lowercased form.
     fn stub_of(&self, root: &SessionRoot, thread_id: &str) -> Option<SessionStub> {
-        let thread_id = thread_id.to_owned();
+        let thread_id = crate::search::session_id_for_lookup(thread_id).into_owned();
         if !self.listed.contains(&thread_id) {
             return None;
         }
@@ -1105,6 +1106,18 @@ mod tests {
 
         assert_eq!(stub.locator, newest);
         assert!(stub.subagents.is_empty());
+    }
+
+    /// Codex writes the thread id in lowercase; a paste in uppercase names the
+    /// same thread.
+    #[test]
+    fn an_uppercase_thread_id_resolves_to_the_same_rollout() {
+        let home = tempfile::tempdir().unwrap();
+        let rollout = write_rollout(home.path(), "2026-08-19T10-00-00", THREAD);
+
+        let stub = resolved_stub(home.path(), &THREAD.to_ascii_uppercase()).unwrap();
+
+        assert_eq!(stub.locator, rollout);
     }
 
     #[test]
