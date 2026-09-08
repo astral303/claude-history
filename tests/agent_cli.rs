@@ -332,6 +332,43 @@ fn omp_subagent_transcripts_are_searchable_through_their_session() {
     assert_shows(&read_with_subagents, "OMP sub-agent answer searchable");
 }
 
+/// `PI_CODING_AGENT_SESSION_DIR` points Pi and OMP at one directory, where the
+/// list shows an OMP session once. A delete by its id has to find it once too,
+/// and delete the artifacts directory OMP keeps beside it.
+#[test]
+fn deleting_an_omp_session_in_a_shared_session_directory_removes_its_artifacts() {
+    let config = tempfile::tempdir().expect("config");
+    let sessions = tempfile::tempdir().expect("sessions");
+    let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/omp");
+    let transcript = sessions.path().join("omp.jsonl");
+    std::fs::copy(fixtures.join("v3.jsonl"), &transcript).expect("copy OMP fixture");
+    let artifacts = sessions.path().join("omp");
+    std::fs::create_dir_all(&artifacts).expect("create the artifacts directory");
+    std::fs::copy(
+        fixtures.join("subagent.jsonl"),
+        artifacts.join("worker.jsonl"),
+    )
+    .expect("copy the OMP sub-agent fixture");
+
+    let delete = run_pi(
+        config.path(),
+        sessions.path(),
+        &["--delete", "omp_session_custom_id"],
+    );
+
+    let delete_stderr = String::from_utf8_lossy(&delete.stderr);
+    assert!(delete.status.success(), "{delete_stderr}");
+    assert!(
+        delete_stderr.contains("Deleted OMP session omp_session_custom_id (1 sub-agent session)"),
+        "{delete_stderr}"
+    );
+    assert!(!transcript.exists());
+    assert!(
+        !artifacts.exists(),
+        "the artifacts directory is deleted with the transcript"
+    );
+}
+
 #[test]
 fn codex_sessions_support_agent_search_read_and_direct_render() {
     let config = tempfile::tempdir().expect("config");

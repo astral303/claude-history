@@ -785,6 +785,35 @@ fn omp_title_slot(title: &str, timestamp: &str, bytes: usize) -> Result<String> 
     }
 }
 
+/// Fixtures for a session directory Pi and OMP share.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use std::path::{Path, PathBuf};
+
+    /// The OMP session fixture copied twice into `directory`, as written and
+    /// without its title slot, so both state one header id and the list shows
+    /// the first under OMP and the second under Pi.
+    pub(crate) fn write_titled_and_untitled(directory: &Path) -> (PathBuf, PathBuf) {
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/omp/v3.jsonl");
+        std::fs::create_dir_all(directory).unwrap();
+        let titled = directory.join("titled.jsonl");
+        std::fs::copy(&fixture, &titled).unwrap();
+        let untitled = directory.join("untitled.jsonl");
+        copy_without_title_slot(&fixture, &untitled);
+        (titled, untitled)
+    }
+
+    fn copy_without_title_slot(fixture: &Path, destination: &Path) {
+        let contents = std::fs::read_to_string(fixture).unwrap();
+        let (title_slot, rest) = contents.split_once('\n').unwrap();
+        assert!(
+            title_slot.contains(r#""type":"title""#),
+            "{fixture:?} has no title slot"
+        );
+        std::fs::write(destination, rest).unwrap();
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
