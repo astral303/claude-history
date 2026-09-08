@@ -1154,9 +1154,10 @@ fn loading_status(loaded: usize, progress: Option<&LoadProgress>) -> String {
 fn render_search_bar(frame: &mut Frame, app: &App, area: Rect) {
     let count_text = match app.loading_state() {
         LoadingState::Loading { loaded, progress } => loading_status(*loaded, progress.as_ref()),
-        LoadingState::Ready => match app.selected() {
-            Some(selected) => format!("{}/{}", selected + 1, app.filtered().len()),
-            None => format!("0/{}", app.filtered().len()),
+        LoadingState::Ready => match (app.search_spinner_glyph(), app.selected()) {
+            (Some(glyph), _) => format!("{glyph} searching"),
+            (None, Some(selected)) => format!("{}/{}", selected + 1, app.filtered().len()),
+            (None, None) => format!("0/{}", app.filtered().len()),
         },
     };
     let status_text = if app.semantic_search_available() {
@@ -2505,6 +2506,67 @@ mod tests {
             .draw(|frame| render_search_bar(frame, app, frame.area()))
             .unwrap();
         terminal
+    }
+
+    /// A start ten seconds back is past the spinner delay however slowly the
+    /// test runs, so the test does not depend on the wall clock.
+    fn search_started_long_ago(app: &mut App) {
+        app.set_search_started_at_for_test(
+            std::time::Instant::now() - std::time::Duration::from_secs(10),
+        );
+    }
+
+    /// A start an hour ahead reads as zero elapsed, so the delay has not
+    /// passed however slowly the test runs.
+    fn search_started_within_the_delay(app: &mut App) {
+        app.set_search_started_at_for_test(
+            std::time::Instant::now() + std::time::Duration::from_secs(3600),
+        );
+    }
+
+    /// The query is typed but not yet filtered, so the rows and the count on
+    /// screen are the previous query's.
+    fn lexical_app_mid_search(query: &str) -> App {
+        let mut app = App::new(
+            vec![test_conversation()],
+            ToolDisplayMode::Truncated,
+            false,
+            KeyBindings::default(),
+            vec![],
+        );
+        app.set_query_for_test(query);
+        app
+    }
+
+    #[test]
+    fn a_search_still_running_after_the_spinner_delay_replaces_the_count_with_searching() {
+        let mut app = lexical_app_mid_search("m100");
+        search_started_long_ago(&mut app);
+
+        let line = row_text(&draw_search_bar(&app), 0);
+        assert!(line.contains("searching"), "{line:?}");
+        assert!(!line.contains("1/1"), "{line:?}");
+    }
+
+    #[test]
+    fn a_search_just_dispatched_keeps_the_previous_count() {
+        let mut app = lexical_app_mid_search("m100");
+        search_started_within_the_delay(&mut app);
+
+        let line = row_text(&draw_search_bar(&app), 0);
+        assert!(line.contains("1/1"), "{line:?}");
+        assert!(!line.contains("searching"), "{line:?}");
+    }
+
+    #[test]
+    fn a_semantic_search_still_running_keeps_its_mode_label_beside_searching() {
+        let mut app = semantic_searching_app("m100", SemanticProgress::Ranking);
+        search_started_long_ago(&mut app);
+
+        let line = row_text(&draw_search_bar(&app), 0);
+        assert!(line.contains("sem "), "{line:?}");
+        assert!(line.contains("searching"), "{line:?}");
+        assert!(!line.contains("1/1"), "{line:?}");
     }
 
     /// The prompt is `" ❯ "`, so the query starts at column 3; `column_of`

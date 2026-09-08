@@ -17,6 +17,9 @@
 
 ### Fixes
 
+- Fix a search that takes longer than a moment leaving the previous query's
+  match count on screen. The count now reads `searching` with a spinner until
+  the results arrive.
 - Fix an unknown OpenCode or Kimi session ID running as a text search; the
   list now shows "not found", as it does for a UUID.
 - Fix a session ID pasted in uppercase reported as not found even though the
